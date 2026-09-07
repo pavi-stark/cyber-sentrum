@@ -99,12 +99,18 @@ class DigiLockerService:
         else:
             masked = "Registered Mobile"
 
+        # Dispatch real SMS via SMSService (Fast2SMS / Twilio / Live Carrier)
+        from app.services.sms_service import SMSService
+        sms_delivery = SMSService.send_otp_sms(clean_id, generated_otp)
+
         return {
             "success": True,
             "transaction_id": txn_id,
             "message": f"DigiLocker 6-digit OTP dispatched to {masked}.",
             "phone_masked": masked,
-            "generated_otp": generated_otp, # Live OTP payload for immediate testing
+            "generated_otp": generated_otp,
+            "sms_delivery": sms_delivery,
+            "real_sms_sent": sms_delivery.get("real_sms_sent", False),
             "expires_in_seconds": 600,
             "sms_preview": f"Govt of India (DigiLocker): Your OTP for Aadhaar/ID verification is {generated_otp}. Valid for 10 mins. Do not share with anyone."
         }

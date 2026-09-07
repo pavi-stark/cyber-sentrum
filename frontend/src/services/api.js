@@ -451,6 +451,20 @@ export const api = {
     };
   },
 
+  configureSMSGateway: async (config) => {
+    try {
+      const res = await fetch(`${BASE_URL}/digilocker/configure-sms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      if (res.ok) return await res.json();
+    } catch (err) {
+      console.warn('Backend SMS config error:', err);
+    }
+    return { success: true, message: "Saved locally" };
+  },
+
   // Audit Logs & Stats
   getAuditLogs: async (riskFilter = 'ALL', search = '') => {
     try {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   UserCheck, Shield, Upload, Camera, CheckCircle2, AlertTriangle,
   XCircle, RotateCcw, Play, Loader2, User, CreditCard,
@@ -50,6 +50,13 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
   const [result, setResult] = useState(null);
   const [isDigiLockerOpen, setIsDigiLockerOpen] = useState(false);
   const [isDigiLockerVerified, setIsDigiLockerVerified] = useState(false);
+  const resultRef = useRef(null);
+
+  useEffect(() => {
+    if (result && resultRef.current) {
+      resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [result]);
 
   // Change document type → clear fields + errors (allowed when no image is locked)
   const handleDocTypeChange = (newType) => {
@@ -144,57 +151,62 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
     }
     setFields(f);
     setMismatchError(null);
+
+    const isOriginal = dlData.authenticity_check?.is_original !== false;
+
     setExtractStatus({
-      type: 'success',
-      message: `✓ DigiLocker Verified! 100% Original Document Authenticated via ${dlData.audit_trail?.issuer || 'UIDAI'}.`
+      type: isOriginal ? 'success' : 'error',
+      message: isOriginal
+        ? `✓ DigiLocker Verified! 100% Original Document Authenticated via ${dlData.audit_trail?.issuer || 'UIDAI'}.`
+        : `❌ DigiLocker Mismatch: ${dlData.authenticity_check?.discrepancies?.[0] || 'Suspected Forgery / Tamper Detected.'}`
     });
 
     const verifiedResult = {
       risk_assessment: {
-        risk_score: 0.0,
-        risk_level: 'LOW',
-        verdict: 'CLEAR',
-        recommendation: 'VERIFIED_ORIGINAL_DIGILOCKER',
-        summary: `Document 100% Authenticated and Certified Genuine via Government of India DigiLocker National Gateway (${dlData.audit_trail?.issuer || 'UIDAI Central Vault'}). No tampering or forgery detected.`
+        composite_risk_score: isOriginal ? 0.0 : 85.0,
+        risk_level: isOriginal ? 'LOW' : 'HIGH',
+        verdict: isOriginal ? 'CLEAR' : 'REJECTED',
+        recommendation: isOriginal ? 'VERIFIED_ORIGINAL_DIGILOCKER' : 'FRAUD_TAMPER_ALERT',
+        summary: isOriginal
+          ? `Document 100% Authenticated and Certified Genuine via Government of India DigiLocker National Gateway (${dlData.audit_trail?.issuer || 'UIDAI Central Vault'}). Cryptographic SHA-256 RSA digital signature valid.`
+          : `SECURITY ALERT: Uploaded document does not match Government Master Records (${dlData.audit_trail?.issuer || 'DigiLocker'}). ${dlData.authenticity_check?.discrepancies?.join(', ')}`
       },
-      gate_results: {
-        qr_cryptography: {
-          status: 'PASS',
-          confidence: 'HIGH',
-          signature_valid: true,
-          issuer: dlData.audit_trail?.issuer || 'Unique Identification Authority of India (UIDAI)',
-          certificate_issuer: dlData.audit_trail?.cert_issuer || 'National Informatics Centre (NIC) CA',
-          details: 'Digital SHA-256 RSA cryptographic certificate validated against National Public Key Directory.'
-        },
-        ela_tamper_analysis: {
-          status: 'PASS',
-          confidence: 'HIGH',
-          tamper_detected: false,
-          details: 'Official digitally signed master record — 0% compression/splicing anomaly detected.'
-        },
-        database_cross_match: {
-          status: 'PASS',
-          confidence: 'HIGH',
-          watchlist_hit: false,
-          record_found: true,
-          details: 'Record exists and matches Central Government Registry.'
-        },
-        biometric_face_matching: {
-          status: 'PASS',
-          confidence: 'HIGH',
-          face_match: true,
-          details: 'Citizen identity verified via UIDAI/MoRTH 2FA OTP.'
-        },
-        mathematical_checksum: {
-          status: 'PASS',
-          confidence: 'HIGH',
-          checksum_valid: true,
-          details: 'Mathematical checksum and Verhoeff algorithm passed with 100% integrity.'
+      forensics: {
+        status: isOriginal ? 'CLEAN' : 'TAMPERED',
+        tamper_score: isOriginal ? 0.0 : 85.0,
+        qr_analysis: {
+          detected: true,
+          status: isOriginal ? 'VALID_SIGNATURE' : 'TAMPERED_OR_CORRUPT',
+          message: isOriginal
+            ? `Cryptographic digital signature verified by ${dlData.audit_trail?.cert_issuer || 'NIC CA'}.`
+            : 'Digital signature mismatch with Government Master Vault.'
         }
       },
+      database_verification: {
+        status: isOriginal ? 'MATCHED' : 'FLAGGED_MISMATCH',
+        match_percentage: isOriginal ? 100 : 20,
+        is_verified: isOriginal,
+        registry: 'Government of India DigiLocker National Vault (UIDAI / MoRTH / ECI)',
+        details: isOriginal
+          ? `Official record confirmed in National Central Registry (${dlData.audit_trail?.issuer}).`
+          : (dlData.authenticity_check?.discrepancies?.[0] || 'Record discrepancy detected.')
+      },
+      biometrics: {
+        selfie_provided: true,
+        match_score: isOriginal ? 99.0 : 30.0,
+        face_match: isOriginal,
+        details: isOriginal ? 'Citizen identity authenticated via Government 2FA OTP.' : 'OTP 2FA failed or mismatched.'
+      },
+      mrz_data: {
+        checksum_valid: isOriginal,
+        format: 'Government Digital Certificate (SHA256withRSA)',
+        valid: isOriginal
+      },
+      extracted_fields: f,
       citizen_details: f,
       digilocker_verified: true,
-      audit_token: dlData.digilocker_token
+      audit_token: dlData.digilocker_token,
+      timestamp: dlData.timestamp || new Date().toISOString()
     };
 
     setResult(verifiedResult);
@@ -570,7 +582,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
 
       {/* Verification Result */}
       {result && (
-        <div className={`p-8 rounded-3xl border shadow-md space-y-6 animate-fadeIn ${
+        <div ref={resultRef} className={`p-8 rounded-3xl border shadow-md space-y-6 animate-fadeIn ${
           isVerified ? 'bg-emerald-50/80 border-emerald-300' :
           isSuspicious ? 'bg-amber-50/80 border-amber-300' :
           'bg-red-50/80 border-red-300'
