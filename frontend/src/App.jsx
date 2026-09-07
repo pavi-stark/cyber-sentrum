@@ -5,6 +5,7 @@ import VerificationResultModal from './components/VerificationResultModal';
 
 // Primary Pages
 import IdentityVerificationView from './pages/IdentityVerificationView';
+import AIModelHubView from './pages/AIModelHubView';
 import DocumentScreeningView from './pages/DocumentScreeningView';
 import DashboardView from './pages/DashboardView';
 import SuspiciousCasesView from './pages/SuspiciousCasesView';
@@ -60,6 +61,9 @@ export default function App() {
       <main className="flex-1">
         {activeTab === 'identity' && (
           <IdentityVerificationView onScreeningComplete={handleInspectResult} />
+        )}
+        {activeTab === 'ai-hub' && (
+          <AIModelHubView />
         )}
         {activeTab === 'document' && (
           <DocumentScreeningView onInspectResult={handleInspectResult} />

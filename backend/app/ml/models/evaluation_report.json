@@ -1,0 +1,148 @@
+{
+  "timestamp": "2026-09-07T13:06:42.412560+00:00",
+  "status": "TRAINED",
+  "dataset_size": 1600,
+  "train_samples": 1280,
+  "test_samples": 320,
+  "accuracy": 100.0,
+  "precision": 100.0,
+  "recall": 100.0,
+  "f1_score": 100.0,
+  "roc_auc": 100.0,
+  "cv_mean_accuracy": 99.77,
+  "confusion_matrix": {
+    "labels": [
+      "GENUINE",
+      "IMPERSONATION",
+      "FORGED_DOCUMENT",
+      "SYNTHETIC_DEEPFAKE"
+    ],
+    "matrix": [
+      [
+        80,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        80,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        80,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        80
+      ]
+    ]
+  },
+  "class_metrics": {
+    "GENUINE": {
+      "samples": 80,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    },
+    "IMPERSONATION": {
+      "samples": 80,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    },
+    "FORGED_DOCUMENT": {
+      "samples": 80,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    },
+    "SYNTHETIC_DEEPFAKE": {
+      "samples": 80,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    }
+  },
+  "feature_importances": [
+    {
+      "feature": "liveness_score",
+      "importance": 17.87
+    },
+    {
+      "feature": "ela_variance_anomaly",
+      "importance": 13.14
+    },
+    {
+      "feature": "face_cosine_similarity",
+      "importance": 12.16
+    },
+    {
+      "feature": "face_block_distance",
+      "importance": 10.49
+    },
+    {
+      "feature": "face_hist_correlation",
+      "importance": 9.51
+    },
+    {
+      "feature": "ocr_qr_text_similarity",
+      "importance": 8.85
+    },
+    {
+      "feature": "tamper_localization_score",
+      "importance": 5.76
+    },
+    {
+      "feature": "ela_mean_discrepancy",
+      "importance": 5.27
+    },
+    {
+      "feature": "edge_density_difference",
+      "importance": 4.34
+    },
+    {
+      "feature": "compression_quality_ratio",
+      "importance": 4.01
+    },
+    {
+      "feature": "laplacian_sharpness_ratio",
+      "importance": 3.97
+    },
+    {
+      "feature": "color_channel_imbalance",
+      "importance": 2.41
+    },
+    {
+      "feature": "aspect_ratio_deviation",
+      "importance": 1.25
+    },
+    {
+      "feature": "face_crop_resolution",
+      "importance": 0.88
+    },
+    {
+      "feature": "doc_type_encoded",
+      "importance": 0.04
+    },
+    {
+      "feature": "database_record_match",
+      "importance": 0.04
+    },
+    {
+      "feature": "qr_signature_match",
+      "importance": 0.01
+    },
+    {
+      "feature": "checksum_validity",
+      "importance": 0.01
+    }
+  ],
+  "model_type": "Ensemble (RandomForest + GradientBoosting)"
+}

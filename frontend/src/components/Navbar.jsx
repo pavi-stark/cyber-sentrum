@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, LayoutDashboard, UserCheck, FileCheck, 
   History, ShieldAlert, BarChart3, Clock, PlusCircle, 
-  User, LogOut, ChevronDown, Database
+  User, LogOut, ChevronDown, Database, Cpu
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -22,6 +22,7 @@ export default function Navbar({
 
   const navItems = [
     { id: 'identity', label: 'Identity Verification', icon: UserCheck },
+    { id: 'ai-hub', label: 'AI Model & Dataset', icon: Cpu, badge: 'ML' },
     { id: 'document', label: 'Document Forensics & QR', icon: FileCheck },
     { id: 'dashboard', label: 'Dashboard & Metrics', icon: LayoutDashboard },
     { id: 'suspicious', label: 'Suspicious Queue', icon: ShieldAlert, badge: 'Live' },

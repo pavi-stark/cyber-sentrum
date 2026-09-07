@@ -8,6 +8,7 @@ from app.api.blacklist import router as blacklist_router
 from app.api.audit import router as audit_router
 from app.api.demo_samples import router as samples_router
 from app.api.digilocker import router as digilocker_router
+from app.api.ml_training import router as ml_router
 
 # Create Database tables
 Base.metadata.create_all(bind=engine)
@@ -32,6 +33,7 @@ app.include_router(blacklist_router)
 app.include_router(audit_router)
 app.include_router(samples_router)
 app.include_router(digilocker_router)
+app.include_router(ml_router)
 
 from app.models.screening_log import ScreeningLog
 from datetime import datetime, timedelta, timezone
