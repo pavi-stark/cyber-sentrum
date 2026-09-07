@@ -683,6 +683,8 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
         isOpen={isDigiLockerOpen}
         onClose={() => setIsDigiLockerOpen(false)}
         onDigiLockerSuccess={handleDigiLockerSuccess}
+        uploadedFields={fields}
+        defaultDocType={docType}
       />
     </div>
   );

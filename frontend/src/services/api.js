@@ -406,15 +406,27 @@ export const api = {
     };
   },
 
-  fetchDigiLockerDoc: async (transactionId, otp, documentType = 'AADHAAR') => {
+  fetchDigiLockerDoc: async (transactionId, otp, documentType = 'AADHAAR', uploadedFields = null) => {
     try {
       const res = await fetch(`${BASE_URL}/digilocker/fetch-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transaction_id: transactionId, otp, document_type: documentType })
+        body: JSON.stringify({
+          transaction_id: transactionId,
+          otp,
+          document_type: documentType,
+          uploaded_fields: uploadedFields
+        })
       });
-      if (res.ok) return await res.json();
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || 'OTP verification failed');
+      }
+      return await res.json();
     } catch (err) {
+      if (err.message && !err.message.includes('fetch')) {
+        throw err;
+      }
       console.warn('Backend offline, returning fallback DigiLocker document');
     }
     return {
@@ -423,10 +435,11 @@ export const api = {
       verification_status: "DIGILOCKER_VERIFIED",
       is_digitally_signed: true,
       extracted_fields: {
-        full_name: "PAVITHRAN",
+        full_name: "PAVITHRAN S",
         document_number: "XXXX XXXX 2227",
         dob: "15/08/2003",
-        address: "No. 42, Pillayar Kovil Street, Anna Nagar, Chennai, Tamil Nadu 600040",
+        gender: "MALE",
+        address: "No. 42, Pillayar Kovil Street, Anna Nagar West, Chennai, Tamil Nadu 600040",
         document_type: documentType.includes('PAN') ? "PAN_CARD" : documentType.includes('DRIV') ? "DRIVING_LICENSE" : "AADHAAR_CARD"
       },
       audit_trail: {
