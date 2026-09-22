@@ -17,13 +17,22 @@ export default function App() {
   // Navigation active tab - defaults to main Identity & Document Verification
   const [activeTab, setActiveTab] = useState('identity');
 
-  // Authenticated User & Role Management
-  const [currentUser, setCurrentUser] = useState({
-    name: 'Pavithran (Lead Admin)',
-    email: 'admin.pavithran@cybersentry.gov.in',
-    role: 'ADMIN',
-    avatar: '🛡️',
-    loginTime: '10:00 AM'
+  // Authenticated User & Role Management with localStorage persistence
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cyber_sentry_user');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      name: 'Pavithran (Lead Admin)',
+      username: 'pavithran',
+      email: 'pavithran@github.com',
+      role: 'ADMIN',
+      badge: 'Lead System Administrator',
+      avatar: 'https://github.com/pavithran.png',
+      auth_provider: 'GITHUB',
+      loginTime: 'Active Session'
+    };
   });
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -34,10 +43,16 @@ export default function App() {
 
   const handleLogin = (user) => {
     setCurrentUser(user);
+    try {
+      localStorage.setItem('cyber_sentry_user', JSON.stringify(user));
+    } catch (e) {}
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    try {
+      localStorage.removeItem('cyber_sentry_user');
+    } catch (e) {}
   };
 
   const handleInspectResult = (res) => {

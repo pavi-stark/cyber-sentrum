@@ -9,6 +9,7 @@ from app.api.audit import router as audit_router
 from app.api.demo_samples import router as samples_router
 from app.api.digilocker import router as digilocker_router
 from app.api.ml_training import router as ml_router
+from app.api.auth import router as auth_router
 
 # Create Database tables
 Base.metadata.create_all(bind=engine)
@@ -34,6 +35,7 @@ app.include_router(audit_router)
 app.include_router(samples_router)
 app.include_router(digilocker_router)
 app.include_router(ml_router)
+app.include_router(auth_router)
 
 from app.models.screening_log import ScreeningLog
 from datetime import datetime, timedelta, timezone
@@ -83,18 +85,43 @@ def startup_event():
         db.close()
 
 
-@app.get("/")
-def root():
-    return {
-        "status": "ONLINE",
-        "system": "Cyber Sentry AI Document Screening Terminal",
-        "hackathon": "Smart India Hackathon 2026",
-        "problem_statement_id": "26188",
-        "endpoints": {
-            "docs": "/docs",
-            "screen": "/api/screen/process-json",
-            "samples": "/api/samples",
-            "blacklist": "/api/blacklist",
-            "audit": "/api/audit/logs"
+import os
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Check if production frontend build exists
+frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+if frontend_dist.exists() and (frontend_dist / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="static_assets")
+
+    @app.get("/")
+    async def serve_frontend_root():
+        return FileResponse(str(frontend_dist / "index.html"))
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend_spa(full_path: str):
+        # Don't intercept API routes or Swagger docs
+        if full_path.startswith("api") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            return None
+        file_path = frontend_dist / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(frontend_dist / "index.html"))
+else:
+    @app.get("/")
+    def root():
+        return {
+            "status": "ONLINE",
+            "system": "Cyber Sentry AI Document Screening Terminal",
+            "hackathon": "Smart India Hackathon 2026",
+            "problem_statement_id": "26188",
+            "endpoints": {
+                "docs": "/docs",
+                "screen": "/api/screen/process-json",
+                "samples": "/api/samples",
+                "blacklist": "/api/blacklist",
+                "audit": "/api/audit/logs"
+            }
         }
-    }
