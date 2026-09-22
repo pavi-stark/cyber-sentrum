@@ -11,6 +11,8 @@ from app.api.digilocker import router as digilocker_router
 from app.api.ml_training import router as ml_router
 from app.api.auth import router as auth_router
 
+from app.core.security import RateLimitMiddleware, SecurityHeadersMiddleware
+
 # Create Database tables
 Base.metadata.create_all(bind=engine)
 
@@ -18,6 +20,10 @@ app = FastAPI(
     title="AI-Based Fake Identity & Document Screening System",
     version="1.0.0"
 )
+
+# Enterprise Security Middlewares
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware, max_requests=150, window_seconds=60)
 
 # CORS Middleware
 app.add_middleware(

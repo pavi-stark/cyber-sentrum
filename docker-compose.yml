@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - CYBER_SENTRY_SECRET_KEY=CYBER_SENTRY_GOV_2026_SECURE_HMAC_SHA256_KEY_26188
+      - FAST2SMS_API_KEY=${FAST2SMS_API_KEY:-}
+    restart: always

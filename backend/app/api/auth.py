@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+from app.core.security import TokenSecurity
 
 router = APIRouter(prefix="/api/auth", tags=["Officer Authentication & GitHub Single Sign-On"])
 

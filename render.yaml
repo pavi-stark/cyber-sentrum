@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: cyber-sentry-ai-screening
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: FAST2SMS_API_KEY
+        sync: false
+      - key: CYBER_SENTRY_SECRET_KEY
+        generateValue: true
+      - key: PORT
+        value: 8000
