@@ -1,4 +1,20 @@
-const BASE_URL = 'http://localhost:8000/api';
+// Dynamic API Base URL — works seamlessly across Localhost, Mobile Wi-Fi, LAN, and Cloud
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    const port = window.location.port;
+    // When accessing through Vite dev server (port 5173 / 3000 / 5174)
+    if (port === '5173' || port === '3000' || port === '5174') {
+      return `${protocol}//${hostname}:8000/api`;
+    }
+    // When served from production ASGI or cloud hosting
+    return `${protocol}//${window.location.host}/api`;
+  }
+  return 'http://localhost:8000/api';
+};
+
+const BASE_URL = getBaseUrl();
 
 // Verified Government Citizen Identity Registry (Mock Repository for 100% accurate live cross-matching)
 const CITIZEN_DATABASE = [
