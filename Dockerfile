@@ -39,5 +39,5 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app/backend
 
-# Start Production ASGI Server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start Production ASGI Server binding dynamically to Render's $PORT
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
