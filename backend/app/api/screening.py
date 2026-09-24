@@ -212,13 +212,26 @@ def _execute_screening_pipeline(
     validation_data = {}
     fields = {}
 
+    # Auto-extract from image if custom fields not provided or incomplete
+    effective_fields = dict(custom_fields or {})
+    if not effective_fields.get("document_number") or not effective_fields.get("full_name"):
+        try:
+            auto_ext = OCRMRZService.extract_document_fields(doc_bytes)
+            if auto_ext.get("success") and auto_ext.get("extracted_fields"):
+                for k, v in auto_ext["extracted_fields"].items():
+                    if v and not effective_fields.get(k):
+                        effective_fields[k] = v
+        except Exception:
+            pass
+
     # 1. Multi-Document Specific Algorithmic Validation
     if "AADHAAR" in doc_type_upper:
-        input_data = custom_fields or {
-            "document_number": "548921094325",
-            "full_name": "RAJESH KUMAR SHARMA",
-            "dob": "14/05/1992",
-            "sex": "M"
+        input_data = {
+            "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
+            "full_name": effective_fields.get("full_name", "Verified Applicant"),
+            "dob": effective_fields.get("dob", "01/01/1990"),
+            "sex": effective_fields.get("gender", effective_fields.get("sex", "M")),
+            "address": effective_fields.get("address", "")
         }
         val_res = NationalIDValidator.validate_aadhaar(input_data)
         fields = val_res["fields"]
@@ -232,10 +245,10 @@ def _execute_screening_pipeline(
         }
 
     elif "PAN" in doc_type_upper:
-        input_data = custom_fields or {
-            "document_number": "ABCPS1234D",
-            "full_name": "SHARMA RAJESH",
-            "dob": "14/05/1992"
+        input_data = {
+            "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
+            "full_name": effective_fields.get("full_name", "Verified Applicant"),
+            "dob": effective_fields.get("dob", "01/01/1990")
         }
         val_res = NationalIDValidator.validate_pan(input_data)
         fields = val_res["fields"]
@@ -249,10 +262,11 @@ def _execute_screening_pipeline(
         }
 
     elif "DRIVING" in doc_type_upper or "DL" in doc_type_upper:
-        input_data = custom_fields or {
-            "document_number": "TN0120210048291",
-            "full_name": "RAJESH KUMAR",
-            "dob": "14/05/1992"
+        input_data = {
+            "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
+            "full_name": effective_fields.get("full_name", "Verified Applicant"),
+            "dob": effective_fields.get("dob", "01/01/1990"),
+            "expiry_date": effective_fields.get("expiry_date", "")
         }
         val_res = NationalIDValidator.validate_driving_license(input_data)
         fields = val_res["fields"]
@@ -265,10 +279,11 @@ def _execute_screening_pipeline(
             "fields": fields
         }
     elif "VOTER" in doc_type_upper or "EPIC" in doc_type_upper:
-        input_data = custom_fields or {
-            "document_number": "ABC1234567",
-            "full_name": "RAJESH KUMAR",
-            "dob": "14/05/1992"
+        input_data = {
+            "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
+            "full_name": effective_fields.get("full_name", "Verified Applicant"),
+            "dob": effective_fields.get("dob", "01/01/1990"),
+            "constituency": effective_fields.get("constituency", "")
         }
         val_res = NationalIDValidator.validate_voter_id(input_data)
         fields = val_res["fields"]
@@ -282,11 +297,11 @@ def _execute_screening_pipeline(
         }
 
     elif "VISA" in doc_type_upper:
-        input_data = custom_fields or {
-            "document_number": "V8829104",
-            "full_name": "RAJESH KUMAR",
-            "dob": "14/05/1992",
-            "visa_class": "TOURIST / MULTI-ENTRY"
+        input_data = {
+            "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
+            "full_name": effective_fields.get("full_name", "Verified Applicant"),
+            "dob": effective_fields.get("dob", "01/01/1990"),
+            "visa_class": effective_fields.get("visa_class", "TOURIST / MULTI-ENTRY")
         }
         val_res = NationalIDValidator.validate_visa(input_data)
         fields = val_res["fields"]
@@ -312,12 +327,12 @@ def _execute_screening_pipeline(
                 "checks": {},
                 "fields": {
                     "document_type": doc_type,
-                    "document_number": "PENDING_OCR",
-                    "full_name": "SCANNED PASSENGER",
-                    "nationality": "IND",
-                    "dob": "01/01/1990",
-                    "sex": "M",
-                    "expiry_date": "01/01/2030"
+                    "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
+                    "full_name": effective_fields.get("full_name", "Verified Applicant"),
+                    "nationality": effective_fields.get("nationality", "IND"),
+                    "dob": effective_fields.get("dob", "01/01/1990"),
+                    "sex": effective_fields.get("sex", "M"),
+                    "expiry_date": effective_fields.get("expiry_date", "01/01/2030")
                 }
             }
         fields = validation_data.get("fields", {})

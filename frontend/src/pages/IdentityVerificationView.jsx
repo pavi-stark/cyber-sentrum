@@ -5,6 +5,7 @@ import {
   QrCode, Database, Flame, Scan, ShieldCheck, AlertOctagon, Lock
 } from 'lucide-react';
 import { api } from '../services/api';
+import { ocrService } from '../services/ocrService';
 import DigiLockerModal from '../components/DigiLockerModal';
 
 // ─── Per-document field configuration (Aadhaar, Voter ID, Driving License) ──
@@ -93,39 +94,67 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
 
       try {
         setIsExtracting(true);
-        setExtractStatus({ type: 'info', message: 'Scanning QR code & extracting identity fields...' });
+        setExtractStatus({ type: 'info', message: 'Analyzing document with AI Optical Character Recognition (OCR)...' });
 
-        const extractRes = await api.extractDocumentFields(base64Data);
-
-        if (extractRes?.is_valid_document === false) {
-          setExtractStatus({
-            type: 'error',
-            message: '❌ Invalid document: Uploaded image is not a recognized Government ID (Aadhaar, PAN, Passport, Voter ID, DL, Visa).'
-          });
-          setDocumentImage('');
-          setDetectedDocType(null);
-          return;
+        // 1. Run Backend Extraction (QR Code + Server-side OCR)
+        let backendFields = {};
+        let backendType = null;
+        try {
+          const extractRes = await api.extractDocumentFields(base64Data);
+          if (extractRes?.is_valid_document !== false && extractRes?.extracted_fields) {
+            backendFields = extractRes.extracted_fields;
+            backendType = extractRes.detected_document_type;
+          }
+        } catch (e) {
+          console.warn('Backend extract skipped, continuing with browser OCR:', e);
         }
 
-        const detectedType = extractRes?.detected_document_type;
-        const extractedFields = extractRes?.extracted_fields || {};
+        // 2. Run High-Accuracy Browser OCR (Tesseract.js)
+        let clientFields = {};
+        let clientType = null;
+        try {
+          const clientRes = await ocrService.extractFromImage(base64Data, backendType || docType);
+          if (clientRes?.success && clientRes?.fields) {
+            clientFields = clientRes.fields;
+            clientType = clientRes.detectedType;
+          }
+        } catch (e) {
+          console.warn('Client OCR error:', e);
+        }
 
-        if (detectedType) {
-          // Auto-select and lock the correct document category
-          setDocType(detectedType);
-          setDetectedDocType(detectedType);
-          setFields(extractedFields);
-          const docLabel = DOC_CATEGORIES.find(d => d.id === detectedType)?.label || detectedType;
+        // 3. Merge fields (preserve real non-empty values)
+        const mergedFields = {
+          ...clientFields,
+          ...Object.fromEntries(
+            Object.entries(backendFields).filter(([_, v]) => v && String(v).trim().length > 0 && String(v) !== 'UNSPECIFIED')
+          )
+        };
+
+        const finalType = backendType || clientType || docType;
+        if (finalType) {
+          setDocType(finalType);
+          setDetectedDocType(finalType);
+        }
+        setFields(mergedFields);
+
+        const docLabel = DOC_CATEGORIES.find(d => d.id === finalType)?.label || finalType;
+        const capturedEntries = Object.entries(mergedFields).filter(([_, v]) => v && String(v).trim().length > 0);
+
+        if (capturedEntries.length > 0) {
+          const summaryParts = [
+            mergedFields.full_name ? `Name: ${mergedFields.full_name}` : null,
+            mergedFields.document_number ? `No: ${mergedFields.document_number}` : null,
+            mergedFields.dob ? `DOB: ${mergedFields.dob}` : null
+          ].filter(Boolean);
+
           setExtractStatus({
             type: 'success',
-            message: `✓ Auto-detected & Locked: ${docLabel} — Fields auto-filled from QR code.`
+            message: `✓ Auto-captured details from image: ${summaryParts.join(' · ') || 'Identity fields populated'}`
           });
         } else {
-          // Document is valid but type couldn't be auto-detected
-          setDetectedDocType(null);
           setExtractStatus({
             type: 'info',
-            message: '✓ Document validated. Please select the correct category and confirm details.'
+            message: `✓ Document loaded (${docLabel}). Please confirm or enter details in the form fields.`
           });
         }
       } catch (err) {

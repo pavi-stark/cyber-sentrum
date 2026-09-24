@@ -386,17 +386,17 @@ class OCRMRZService:
 
             # Step 3: Extract type-specific fields
             if detected_type == "AADHAAR_CARD":
-                fields = OCRMRZService._extract_aadhaar_fields(qr_raw)
+                fields = OCRMRZService._extract_aadhaar_fields(qr_raw, img=img)
             elif detected_type == "PAN_CARD":
-                fields = OCRMRZService._extract_pan_fields(qr_raw)
+                fields = OCRMRZService._extract_pan_fields(qr_raw, img=img)
             elif detected_type == "PASSPORT":
-                fields = OCRMRZService._extract_passport_fields(qr_raw)
+                fields = OCRMRZService._extract_passport_fields(qr_raw, img=img)
             elif detected_type == "VOTER_ID":
-                fields = OCRMRZService._extract_voter_id_fields(qr_raw)
+                fields = OCRMRZService._extract_voter_id_fields(qr_raw, img=img)
             elif detected_type == "DRIVING_LICENSE":
-                fields = OCRMRZService._extract_dl_fields(qr_raw)
+                fields = OCRMRZService._extract_dl_fields(qr_raw, img=img)
             elif detected_type == "VISA":
-                fields = OCRMRZService._extract_visa_fields(qr_raw)
+                fields = OCRMRZService._extract_visa_fields(qr_raw, img=img)
             else:
                 fields = {}
 
@@ -420,117 +420,130 @@ class OCRMRZService:
                 "extracted_fields": {}
             }
 
+    @staticmethod
+    def _ocr_image_text(img_bgr: Optional[np.ndarray]) -> str:
+        """Run OCR on image using pytesseract if available with OpenCV preprocessing."""
+        if img_bgr is None or img_bgr.size == 0:
+            return ""
+        try:
+            import pytesseract
+            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+            filtered = cv2.bilateralFilter(gray, 9, 75, 75)
+            norm = cv2.normalize(filtered, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+            text = pytesseract.image_to_string(norm, config='--psm 6')
+            if len(text.strip()) < 10:
+                text = pytesseract.image_to_string(gray)
+            return text or ""
+        except Exception:
+            return ""
+
     # ─────────────────────────────────────────────────────────────
     # Per-document-type field extractors
     # ─────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _extract_aadhaar_fields(qr_raw: str) -> Dict[str, Any]:
-        """Extract Aadhaar-specific fields: UID (12-digit), Name, DOB, Gender, Address from XML or Secure QR"""
+    def _extract_aadhaar_fields(qr_raw: str, img: Optional[np.ndarray] = None) -> Dict[str, Any]:
+        """Extract Aadhaar-specific fields: UID (12-digit), Name, DOB, Gender, Address from XML or Secure QR or visual OCR"""
         fields = {
             "full_name": "", "document_number": "", "dob": "",
             "gender": "", "address": ""
         }
-        if not qr_raw:
-            return fields
-
-        # ── Format 1: UIDAI Secure QR (Large compressed integer) ─────
-        try:
-            clean_digits = re.sub(r'\s', '', qr_raw)
-            if clean_digits.isdigit() and len(clean_digits) > 80:
-                val = int(clean_digits)
-                byte_len = (val.bit_length() + 7) // 8
-                raw_bytes = val.to_bytes(byte_len, byteorder='big')
-                import zlib
-                decompressed = None
-                try:
-                    decompressed = zlib.decompress(raw_bytes, 16 + zlib.MAX_WBITS)
-                except Exception:
+        if qr_raw:
+            # ── Format 1: UIDAI Secure QR (Large compressed integer) ─────
+            try:
+                clean_digits = re.sub(r'\s', '', qr_raw)
+                if clean_digits.isdigit() and len(clean_digits) > 80:
+                    val = int(clean_digits)
+                    byte_len = (val.bit_length() + 7) // 8
+                    raw_bytes = val.to_bytes(byte_len, byteorder='big')
+                    import zlib
+                    decompressed = None
                     try:
-                        decompressed = zlib.decompress(raw_bytes)
+                        decompressed = zlib.decompress(raw_bytes, 16 + zlib.MAX_WBITS)
                     except Exception:
-                        pass
+                        try:
+                            decompressed = zlib.decompress(raw_bytes)
+                        except Exception:
+                            pass
 
-                if decompressed:
-                    # In UIDAI Secure QR, fields are 255 (0xFF) or 0 separated strings
-                    parts = [p.decode('utf-8', errors='ignore').strip() for p in decompressed.split(b'\xff') if p]
-                    if len(parts) >= 4:
-                        # parts structure: [RefID, Name, DOB, Gender, CareOf, District, Landmark, House, Location, PinCode, PostOffice, State, Street, SubDist, VTC]
-                        ref_id = parts[0] if len(parts) > 0 else ""
-                        name = parts[1] if len(parts) > 1 else ""
-                        dob = parts[2] if len(parts) > 2 else ""
-                        gender = parts[3] if len(parts) > 3 else ""
+                    if decompressed:
+                        parts = [p.decode('utf-8', errors='ignore').strip() for p in decompressed.split(b'\xff') if p]
+                        if len(parts) >= 4:
+                            ref_id = parts[0] if len(parts) > 0 else ""
+                            name = parts[1] if len(parts) > 1 else ""
+                            dob = parts[2] if len(parts) > 2 else ""
+                            gender = parts[3] if len(parts) > 3 else ""
 
-                        if name and re.match(r'^[A-Za-z\s\.]+$', name):
-                            fields["full_name"] = name.upper()
-                        if dob:
-                            fields["dob"] = dob.replace("-", "/")
-                        if gender:
-                            g = gender.upper()
-                            fields["gender"] = "MALE" if g.startswith("M") else "FEMALE" if g.startswith("F") else g
-                        if ref_id and len(ref_id) >= 4:
-                            fields["document_number"] = f"XXXX XXXX {ref_id[-4:]}"
+                            if name and re.match(r'^[A-Za-z\s\.]+$', name):
+                                fields["full_name"] = name.upper()
+                            if dob:
+                                fields["dob"] = dob.replace("-", "/")
+                            if gender:
+                                g = gender.upper()
+                                fields["gender"] = "MALE" if g.startswith("M") else "FEMALE" if g.startswith("F") else g
+                            if ref_id and len(ref_id) >= 4:
+                                fields["document_number"] = f"XXXX XXXX {ref_id[-4:]}"
 
-                        # Address components
-                        addr_parts = [p for p in parts[4:] if p and len(p) > 1 and not p.isdigit()]
-                        if addr_parts:
-                            fields["address"] = ", ".join(addr_parts)
-                        return fields
-        except Exception:
-            pass
+                            addr_parts = [p for p in parts[4:] if p and len(p) > 1 and not p.isdigit()]
+                            if addr_parts:
+                                fields["address"] = ", ".join(addr_parts)
+                            return fields
+            except Exception:
+                pass
 
-        # ── Format 2: UIDAI XML QR (<PrintLetterBarcodeData ...>) ───
-        # Name
-        m = re.search(r'name=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
-        if m:
-            fields["full_name"] = m.group(1).strip().upper()
+            # ── Format 2: UIDAI XML QR (<PrintLetterBarcodeData ...>) ───
+            m = re.search(r'name=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
+            if m: fields["full_name"] = m.group(1).strip().upper()
 
-        # DOB
-        m = re.search(r'dob=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
-        if m:
-            fields["dob"] = m.group(1).strip()
-        else:
-            m = re.search(r'yob=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
+            m = re.search(r'dob=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
             if m:
-                fields["dob"] = f"01/01/{m.group(1).strip()}"
-
-        # UID
-        m = re.search(r'uid=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
-        if m:
-            raw_uid = re.sub(r'\s', '', m.group(1).strip())
-            # Format as XXXX XXXX XXXX
-            if len(raw_uid) == 12:
-                fields["document_number"] = f"{raw_uid[:4]} {raw_uid[4:8]} {raw_uid[8:]}"
+                fields["dob"] = m.group(1).strip()
             else:
-                fields["document_number"] = raw_uid
-        else:
-            m = re.search(r'\b(\d{4})\s?(\d{4})\s?(\d{4})\b', qr_raw)
-            if m:
-                fields["document_number"] = f"{m.group(1)} {m.group(2)} {m.group(3)}"
+                m = re.search(r'yob=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
+                if m: fields["dob"] = f"01/01/{m.group(1).strip()}"
 
-        # Gender
-        m = re.search(r'gender=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
-        if m:
-            g = m.group(1).strip().upper()
-            fields["gender"] = "MALE" if g in ("M", "MALE") else "FEMALE" if g in ("F", "FEMALE") else g
-        else:
-            m = re.search(r'\b(MALE|FEMALE)\b', qr_raw, re.IGNORECASE)
+            m = re.search(r'uid=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
             if m:
-                fields["gender"] = m.group(1).upper()
+                raw_uid = re.sub(r'\s', '', m.group(1).strip())
+                if len(raw_uid) == 12:
+                    fields["document_number"] = f"{raw_uid[:4]} {raw_uid[4:8]} {raw_uid[8:]}"
+                else:
+                    fields["document_number"] = raw_uid
+            else:
+                m = re.search(r'\b(\d{4})\s?(\d{4})\s?(\d{4})\b', qr_raw)
+                if m: fields["document_number"] = f"{m.group(1)} {m.group(2)} {m.group(3)}"
 
-        # Address
-        addr_parts = []
-        for attr in ['co', 'house', 'street', 'lm', 'loc', 'vtc', 'po', 'dist', 'subdist', 'state', 'pc']:
-            m = re.search(rf'{attr}=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
-            if m and m.group(1).strip():
-                addr_parts.append(m.group(1).strip())
-        if addr_parts:
-            fields["address"] = ", ".join(addr_parts)
+            m = re.search(r'gender=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
+            if m:
+                g = m.group(1).strip().upper()
+                fields["gender"] = "MALE" if g in ("M", "MALE") else "FEMALE" if g in ("F", "FEMALE") else g
+
+        # ── Visual Image OCR Fallback if fields are missing ────────
+        if (not fields["full_name"] or not fields["document_number"]) and img is not None:
+            ocr_text = OCRMRZService._ocr_image_text(img)
+            if ocr_text:
+                if not fields["document_number"]:
+                    m = re.search(r'\b(\d{4}\s\d{4}\s\d{4})\b', ocr_text) or re.search(r'\b(\d{12})\b', ocr_text)
+                    if m:
+                        raw_uid = re.sub(r'\s', '', m.group(1))
+                        fields["document_number"] = f"{raw_uid[:4]} {raw_uid[4:8]} {raw_uid[8:]}"
+                if not fields["dob"]:
+                    m = re.search(r'(?:DOB|Birth|YOB|Year)[:\s]*(\d{2}[/-]\d{2}[/-]\d{4}|\d{4})', ocr_text, re.I) or re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
+                    if m: fields["dob"] = m.group(1).replace("-", "/")
+                if not fields["gender"]:
+                    if re.search(r'\b(FEMALE|WOMAN)\b', ocr_text, re.I): fields["gender"] = "FEMALE"
+                    elif re.search(r'\b(MALE|MAN)\b', ocr_text, re.I): fields["gender"] = "MALE"
+                if not fields["full_name"]:
+                    lines = [l.strip() for l in ocr_text.split('\n') if l.strip()]
+                    for l in lines:
+                        if re.match(r'^[A-Z][a-zA-Z\s\.]{3,35}$', l) and not re.search(r'GOVERNMENT|INDIA|UIDAI|AADHAAR|DOB|MALE|FEMALE', l, re.I):
+                            fields["full_name"] = l.upper()
+                            break
 
         return fields
 
     @staticmethod
-    def _extract_pan_fields(qr_raw: str) -> Dict[str, Any]:
+    def _extract_pan_fields(qr_raw: str, img: Optional[np.ndarray] = None) -> Dict[str, Any]:
         """Extract PAN-specific fields: PAN number (10 chars), Name, Father's Name, DOB"""
         fields = {
             "full_name": "", "document_number": "", "dob": "", "father_name": ""
@@ -545,10 +558,26 @@ class OCRMRZService:
             m = re.search(r'dob=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
             if m: fields["dob"] = m.group(1).strip()
 
+        if (not fields["document_number"] or not fields["full_name"]) and img is not None:
+            ocr_text = OCRMRZService._ocr_image_text(img)
+            if ocr_text:
+                if not fields["document_number"]:
+                    m = re.search(r'\b([A-Z]{5}[0-9]{4}[A-Z])\b', ocr_text)
+                    if m: fields["document_number"] = m.group(1).upper()
+                if not fields["dob"]:
+                    m = re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
+                    if m: fields["dob"] = m.group(1).replace("-", "/")
+                if not fields["full_name"]:
+                    lines = [l.strip() for l in ocr_text.split('\n') if l.strip()]
+                    for l in lines:
+                        if re.match(r'^[A-Z\s\.]{3,35}$', l) and not re.search(r'INCOME|TAX|DEPARTMENT|GOVT|INDIA|PERMANENT|ACCOUNT|SIGNATURE', l, re.I):
+                            fields["full_name"] = l.upper()
+                            break
+
         return fields
 
     @staticmethod
-    def _extract_passport_fields(qr_raw: str) -> Dict[str, Any]:
+    def _extract_passport_fields(qr_raw: str, img: Optional[np.ndarray] = None) -> Dict[str, Any]:
         """Extract Passport fields: Passport No, Name, DOB, Expiry, Nationality, MRZ"""
         fields = {
             "full_name": "", "document_number": "", "dob": "",
@@ -567,10 +596,20 @@ class OCRMRZService:
                 if len(raw) >= 1: fields["mrz_line1"] = raw[0]
                 if len(raw) >= 2: fields["mrz_line2"] = raw[1]
 
+        if (not fields["document_number"] or not fields["full_name"]) and img is not None:
+            ocr_text = OCRMRZService._ocr_image_text(img)
+            if ocr_text:
+                if not fields["document_number"]:
+                    m = re.search(r'\b([A-Z][0-9]{7,8})\b', ocr_text)
+                    if m: fields["document_number"] = m.group(1).upper()
+                if not fields["dob"]:
+                    m = re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
+                    if m: fields["dob"] = m.group(1).replace("-", "/")
+
         return fields
 
     @staticmethod
-    def _extract_voter_id_fields(qr_raw: str) -> Dict[str, Any]:
+    def _extract_voter_id_fields(qr_raw: str, img: Optional[np.ndarray] = None) -> Dict[str, Any]:
         """Extract Voter ID fields: EPIC number (3 alpha + 7 digit), Name, DOB, Constituency"""
         fields = {
             "full_name": "", "document_number": "", "dob": "", "constituency": ""
@@ -586,10 +625,20 @@ class OCRMRZService:
             m = re.search(r'constituency=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
             if m: fields["constituency"] = m.group(1).strip().upper()
 
+        if (not fields["document_number"] or not fields["full_name"]) and img is not None:
+            ocr_text = OCRMRZService._ocr_image_text(img)
+            if ocr_text:
+                if not fields["document_number"]:
+                    m = re.search(r'\b([A-Z]{3}[0-9]{7})\b', ocr_text)
+                    if m: fields["document_number"] = m.group(1).upper()
+                if not fields["dob"]:
+                    m = re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
+                    if m: fields["dob"] = m.group(1).replace("-", "/")
+
         return fields
 
     @staticmethod
-    def _extract_dl_fields(qr_raw: str) -> Dict[str, Any]:
+    def _extract_dl_fields(qr_raw: str, img: Optional[np.ndarray] = None) -> Dict[str, Any]:
         """Extract Driving License fields: DL number (State+RTO+Year+Serial), Name, DOB, Expiry, Vehicle Class"""
         fields = {
             "full_name": "", "document_number": "", "dob": "",
@@ -608,37 +657,34 @@ class OCRMRZService:
             m = re.search(r'class=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
             if m: fields["vehicle_class"] = m.group(1).strip().upper()
 
+        if (not fields["document_number"] or not fields["full_name"]) and img is not None:
+            ocr_text = OCRMRZService._ocr_image_text(img)
+            if ocr_text:
+                if not fields["document_number"]:
+                    m = re.search(r'\b([A-Z]{2}[-\s]?[0-9]{2}[-\s]?[0-9]{4,11})\b', ocr_text)
+                    if m: fields["document_number"] = re.sub(r'[-\s]', '', m.group(1)).upper()
+                if not fields["dob"]:
+                    m = re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
+                    if m: fields["dob"] = m.group(1).replace("-", "/")
+
         return fields
 
     @staticmethod
-    def _extract_visa_fields(qr_raw: str) -> Dict[str, Any]:
+    def _extract_visa_fields(qr_raw: str, img: Optional[np.ndarray] = None) -> Dict[str, Any]:
         """Extract Visa fields: Visa number, Name, DOB, Expiry, Visa class, Issuing country"""
         fields = {
             "full_name": "", "document_number": "", "dob": "",
             "expiry_date": "", "visa_class": "", "issuing_country": ""
         }
-        if not qr_raw:
-            return fields
-
-        # Visa number
-        m = re.search(r'\b(V[0-9]{7,10})\b', qr_raw, re.IGNORECASE)
-        if m:
-            fields["document_number"] = m.group(1).upper()
-
-        # Name
-        m = re.search(r'name=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
-        if m:
-            fields["full_name"] = m.group(1).strip().upper()
-
-        # DOB
-        m = re.search(r'\b(\d{2}/\d{2}/\d{4})\b', qr_raw)
-        if m:
-            fields["dob"] = m.group(1).strip()
-
-        # Visa class
-        m = re.search(r'class=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
-        if m:
-            fields["visa_class"] = m.group(1).strip().upper()
+        if qr_raw:
+            m = re.search(r'\b(V[0-9]{7,10})\b', qr_raw, re.IGNORECASE)
+            if m: fields["document_number"] = m.group(1).upper()
+            m = re.search(r'name=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
+            if m: fields["full_name"] = m.group(1).strip().upper()
+            m = re.search(r'\b(\d{2}/\d{2}/\d{4})\b', qr_raw)
+            if m: fields["dob"] = m.group(1).strip()
+            m = re.search(r'class=["\']([^"\']+)["\']', qr_raw, re.IGNORECASE)
+            if m: fields["visa_class"] = m.group(1).strip().upper()
 
         return fields
 

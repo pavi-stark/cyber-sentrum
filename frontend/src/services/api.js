@@ -100,9 +100,9 @@ function runClientSideAnalysis(payload) {
   const sessionId = `CS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.random().toString(36).substring(2,7).toUpperCase()}`;
   const docType = payload.document_type || 'PASSPORT';
   const customFields = payload.extracted_fields || {};
-  const docNum = (customFields.document_number || '548921094325').replace(/\s/g, '').toUpperCase();
-  const fullName = customFields.full_name || 'RAJESH KUMAR SHARMA';
-  const dob = customFields.dob || '14/05/1992';
+  const docNum = (customFields.document_number || 'UNSPECIFIED').replace(/\s/g, '').toUpperCase();
+  const fullName = customFields.full_name || 'Verified Applicant';
+  const dob = customFields.dob || '01/01/1990';
 
   // Determine Tamper / Modification signals
   const isTamperedScenario = docNum.includes('SPLICED') || docNum.includes('FAKE') || docNum.includes('TAMPERED');
