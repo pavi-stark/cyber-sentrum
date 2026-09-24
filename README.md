@@ -120,3 +120,5 @@ sih project 26188/
 * **Explainable AI (XAI)**: Generates human-understandable justification points for each flag.
 * **Tamper-Evident Audit Logging**: Every inspection, risk breakdown, and officer disposition is persistently logged to the database for post-incident forensic audits.
 * **Human-in-the-Loop**: Border officers have final decision authority (`APPROVE`, `REJECT`, `ESCALATE`) on all flagged documents.
+* DEMO LINK : https://cyber-sentrum.onrender.com/
+  
