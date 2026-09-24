@@ -12,6 +12,7 @@ import SuspiciousCasesView from './pages/SuspiciousCasesView';
 import VerificationHistoryView from './pages/VerificationHistoryView';
 import WatchlistManager from './pages/WatchlistManager';
 import SecurityPrivacyView from './pages/SecurityPrivacyView';
+import AnalyticsDashboard from './pages/AnalyticsDashboard';
 
 export default function App() {
   // Navigation active tab - defaults to main Identity & Document Verification
@@ -97,6 +98,9 @@ export default function App() {
         )}
         {activeTab === 'security' && (
           <SecurityPrivacyView />
+        )}
+        {activeTab === 'analytics' && (
+          <AnalyticsDashboard onInspectResult={handleInspectResult} onNavigate={setActiveTab} />
         )}
       </main>
 
