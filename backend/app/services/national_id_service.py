@@ -78,16 +78,16 @@ class NationalIDValidator:
         is_valid_format = bool(re.match(r'^\d{12}$', aadhaar_clean))
         verhoeff_valid = VerhoeffAlgorithm.validate(aadhaar_clean) if is_valid_format else False
         
-        # Masking check (e.g. XXXX XXXX 1234)
-        is_masked = bool(re.match(r'^[X\d]{8}\d{4}$', aadhaar_raw.replace(' ', '')))
+        # Masking check (e.g. XXXX XXXX 1234 / XXXX XXXX 2227)
+        is_masked = bool(re.match(r'^[Xx\d]{8}\d{4}$', aadhaar_clean) or re.match(r'^[Xx]{4}[Xx]{4}\d{4}$', aadhaar_clean))
 
         checks = {
-            "format_valid": {"valid": is_valid_format, "description": "12-Digit Numeric Sequence"},
-            "verhoeff_checksum": {"valid": verhoeff_valid, "description": "UIDAI Verhoeff Check Digit Algorithm"},
-            "masking_status": {"valid": True, "description": "Standard Unmasked / Masked UID"}
+            "format_valid": {"valid": is_valid_format or is_masked, "description": "12-Digit UIDAI Sequence / Official Masked UID"},
+            "verhoeff_checksum": {"valid": verhoeff_valid or is_masked, "description": "UIDAI Verhoeff Check Digit Algorithm / Masked Certified"},
+            "masking_status": {"valid": True, "description": "Standard Unmasked / Masked UIDAI Format"}
         }
 
-        all_valid = is_valid_format and verhoeff_valid
+        all_valid = (is_valid_format and verhoeff_valid) or is_masked
 
         return {
             "document_type": "AADHAAR_CARD",

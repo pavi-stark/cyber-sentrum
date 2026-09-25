@@ -98,23 +98,43 @@ let LOCAL_WATCHLIST = [
 // Fallback client-side analysis simulator
 function runClientSideAnalysis(payload) {
   const sessionId = `CS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.random().toString(36).substring(2,7).toUpperCase()}`;
-  const docType = payload.document_type || 'PASSPORT';
+  const docType = payload.document_type || 'AADHAAR_CARD';
   const customFields = payload.extracted_fields || {};
-  const docNum = (customFields.document_number || 'UNSPECIFIED').replace(/\s/g, '').toUpperCase();
-  const fullName = customFields.full_name || 'Verified Applicant';
-  const dob = customFields.dob || '01/01/1990';
+  const docNum = (customFields.document_number || '').replace(/\s/g, '').toUpperCase();
+  const fullName = (customFields.full_name || '').trim();
+  const dob = customFields.dob || '';
 
-  // Determine Tamper / Modification signals
+  // Validate format per document type
+  let isValidFormat = false;
+  if (docType === 'AADHAAR_CARD') {
+    isValidFormat = /^\d{12}$/.test(docNum) || /^[X\d]{8}\d{4}$/.test(docNum);
+  } else if (docType === 'PAN_CARD') {
+    isValidFormat = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(docNum);
+  } else if (docType === 'PASSPORT') {
+    isValidFormat = /^[A-Z][0-9]{7,8}$/.test(docNum);
+  } else if (docType === 'VOTER_ID') {
+    isValidFormat = /^[A-Z]{3}[0-9]{7}$/.test(docNum);
+  } else if (docType === 'DRIVING_LICENSE') {
+    isValidFormat = /^[A-Z]{2}[0-9]{2}[0-9]{4,11}$/.test(docNum);
+  }
+
+  const isNonDocument = !isValidFormat || !fullName || fullName === 'UNSPECIFIED' || fullName === 'Verified Applicant' || fullName.length < 3;
   const isTamperedScenario = docNum.includes('SPLICED') || docNum.includes('FAKE') || docNum.includes('TAMPERED');
-  const isBlacklisted = LOCAL_WATCHLIST.some(w => w.document_number.toUpperCase() === docNum);
+  const isBlacklisted = LOCAL_WATCHLIST.some(w => w.document_number && w.document_number.toUpperCase() === docNum);
   
-  // Real or uploaded documents default to confirmed database match unless flagged
-  const isDbMatched = !isBlacklisted && !isTamperedScenario;
-  const tamperScore = isTamperedScenario ? 88.5 : 5.8;
-  const riskScore = isBlacklisted ? 98.0 : isTamperedScenario ? 87.0 : 6.0;
+  const isDbMatched = !isNonDocument && !isBlacklisted && !isTamperedScenario;
+  const tamperScore = isNonDocument ? 99.0 : isTamperedScenario ? 88.5 : 5.8;
+  const riskScore = isNonDocument ? 95.0 : isBlacklisted ? 98.0 : isTamperedScenario ? 87.0 : 6.0;
   const riskLevel = riskScore > 70 ? 'HIGH' : riskScore > 30 ? 'REVIEW' : 'LOW';
 
   const riskFactors = [];
+  if (isNonDocument) {
+    riskFactors.push({
+      severity: "CRITICAL",
+      title: "Invalid Document / Non-Identity Image",
+      description: "Uploaded image does not match standard Government Identity Document credentials (missing or invalid document number/name)."
+    });
+  }
   if (isBlacklisted) {
     riskFactors.push({
       severity: "CRITICAL",
@@ -122,14 +142,14 @@ function runClientSideAnalysis(payload) {
       description: "Document number matches an active international red notice alert."
     });
   }
-  if (tamperScore > 40) {
+  if (tamperScore > 40 && !isNonDocument) {
     riskFactors.push({
       severity: "HIGH",
       title: "Digital Tampering Detected (ELA)",
       description: "Error Level Analysis detected anomalous pixel compression boundaries in name/photo zone."
     });
   }
-  if (!isDbMatched) {
+  if (!isDbMatched && !isNonDocument) {
     riskFactors.push({
       severity: "MEDIUM",
       title: "Database Registry Discrepancy",
@@ -144,77 +164,79 @@ function runClientSideAnalysis(payload) {
     risk_assessment: {
       composite_risk_score: riskScore,
       risk_level: riskLevel,
-      recommendation: riskLevel === 'LOW' ? 'CLEAR_PASS (VERIFIED)' : riskLevel === 'REVIEW' ? 'MANUAL_REVIEW_REQUIRED' : 'REJECT_AND_INTERCEPT',
-      summary: riskLevel === 'LOW' 
+      recommendation: isNonDocument ? 'REJECT_INVALID_DOCUMENT' : riskLevel === 'LOW' ? 'CLEAR_PASS (VERIFIED)' : riskLevel === 'REVIEW' ? 'MANUAL_REVIEW_REQUIRED' : 'REJECT_AND_INTERCEPT',
+      summary: isNonDocument
+        ? 'REJECTED: The uploaded file does not match any recognized government identity document format.'
+        : riskLevel === 'LOW' 
         ? 'Document authenticity, QR verification, database match, and facial biometrics verified with 100% integrity.' 
         : 'Discrepancy or modification detected during multi-modal inspection.',
       risk_factors: riskFactors
     },
     extracted_fields: {
-      document_number: docNum,
-      full_name: fullName,
-      dob: dob,
-      address: customFields.address || "124, Gandhi Road, Anna Nagar, Chennai 600040",
-      phone: customFields.phone || "+91 98401 23456",
+      document_number: docNum || "INVALID / NOT FOUND",
+      full_name: fullName || "UNRECOGNIZED",
+      dob: dob || "N/A",
+      address: customFields.address || "N/A",
+      phone: customFields.phone || "N/A",
       email: customFields.email || "applicant@example.com",
       nationality: "IND",
       document_type: docType
     },
     mrz_data: {
-      success: true,
-      valid: !isTamperedScenario,
-      checksum_valid: !isTamperedScenario,
+      success: !isNonDocument,
+      valid: isValidFormat && !isTamperedScenario,
+      checksum_valid: isValidFormat && !isTamperedScenario,
       format: docType.includes('AADHAAR') ? 'UIDAI Verhoeff Checksum' : docType.includes('PAN') ? 'Income Tax PAN Format' : 'ICAO Doc 9303 Checksums',
       checks: {
-        format_valid: { valid: true, description: "Format Structure" },
-        checksum: { valid: !isTamperedScenario, description: "Mathematical Check Digits" }
+        format_valid: { valid: isValidFormat, description: "Format Structure" },
+        checksum: { valid: isValidFormat && !isTamperedScenario, description: "Mathematical Check Digits" }
       }
     },
     forensics: {
       success: true,
       tamper_score: tamperScore,
-      status: tamperScore > 50 ? 'TAMPERED' : tamperScore > 25 ? 'SUSPICIOUS' : 'CLEAN',
+      status: isNonDocument ? 'INVALID_DOCUMENT_STRUCTURE' : tamperScore > 50 ? 'TAMPERED' : tamperScore > 25 ? 'SUSPICIOUS' : 'CLEAN',
       qr_analysis: {
-        detected: true,
-        status: isTamperedScenario ? 'TAMPERED_OR_CORRUPT' : 'VALID_SIGNATURE',
-        message: isTamperedScenario ? 'QR Code digital signature corrupted or mismatch' : 'Cryptographic QR Code Signature Verified Authentic',
+        detected: !isNonDocument && !isTamperedScenario,
+        status: isNonDocument ? 'NOT_PRESENT' : isTamperedScenario ? 'TAMPERED_OR_CORRUPT' : 'VALID_SIGNATURE',
+        message: isNonDocument ? 'No Government QR code found on image' : isTamperedScenario ? 'QR Code digital signature corrupted or mismatch' : 'Cryptographic QR Code Signature Verified Authentic',
         details: {
-          raw_data_sample: `UIDAI:V2:${docNum}:${fullName}:${dob}`,
-          signature_verified: !isTamperedScenario,
-          tamper_detected: isTamperedScenario
+          raw_data_sample: isNonDocument ? 'N/A' : `UIDAI:V2:${docNum}:${fullName}:${dob}`,
+          signature_verified: !isNonDocument && !isTamperedScenario,
+          tamper_detected: isTamperedScenario || isNonDocument
         }
       },
       metrics: {
         tamper_score: tamperScore,
-        high_error_ratio: isTamperedScenario ? 14.8 : 1.2,
-        std_deviation: isTamperedScenario ? 42.1 : 8.5,
-        peak_anomaly_ratio: isTamperedScenario ? 22.4 : 0.8,
-        description: isTamperedScenario ? 'High frequency compression discrepancy detected on portrait block.' : 'Uniform compression levels detected. No digital manipulation found.'
+        high_error_ratio: isTamperedScenario || isNonDocument ? 14.8 : 1.2,
+        std_deviation: isTamperedScenario || isNonDocument ? 42.1 : 8.5,
+        peak_anomaly_ratio: isTamperedScenario || isNonDocument ? 22.4 : 0.8,
+        description: isNonDocument ? 'Image does not match official document layout template.' : isTamperedScenario ? 'High frequency compression discrepancy detected on portrait block.' : 'Uniform compression levels detected. No digital manipulation found.'
       },
       heatmap_image: payload.doc_image_base64,
       overlay_image: payload.doc_image_base64
     },
     biometrics: {
-      match_score: payload.selfie_image_base64 ? 96.4 : 95.0,
-      match_status: 'MATCH',
-      liveness_score: 96.8,
-      is_live: true
+      match_score: isNonDocument ? 0.0 : payload.selfie_image_base64 ? 96.4 : 95.0,
+      match_status: isNonDocument ? 'NO_FACE_MATCH' : 'MATCH',
+      liveness_score: isNonDocument ? 0.0 : 96.8,
+      is_live: !isNonDocument
     },
     database_verification: {
       status: isDbMatched ? 'MATCHED' : 'FLAGGED_MISMATCH',
-      match_percentage: isDbMatched ? 100 : 35,
+      match_percentage: isDbMatched ? 100 : 0,
       is_verified: isDbMatched,
       registry: 'National Central Identity Repository (CIDR / UIDAI / Passport Seva)',
-      details: isDbMatched ? 'Official record confirmed in National Identity Registry.' : 'Record discrepancy or altered document serial detected.'
+      details: isDbMatched ? 'Official record confirmed in National Identity Registry.' : 'Record discrepancy or non-identity document detected.'
     },
     blacklist: {
       is_blacklisted: isBlacklisted,
       details: isBlacklisted ? { document_number: docNum, reason: "Security Watchlist Alert Hit", issuing_authority: "Interpol" } : {}
     },
     validity: {
-      status: "VALID",
+      status: isNonDocument ? "INVALID" : "VALID",
       expiry_date: "Active",
-      days_remaining: 365
+      days_remaining: isNonDocument ? 0 : 365
     },
     status: "COMPLETED"
   };
@@ -225,16 +247,16 @@ function runClientSideAnalysis(payload) {
     session_id: sessionId,
     timestamp: new Date().toISOString(),
     document_type: docType,
-    document_number: docNum,
-    full_name: fullName,
+    document_number: docNum || "INVALID",
+    full_name: fullName || "UNRECOGNIZED",
     dob: dob,
     risk_level: riskLevel,
     composite_risk_score: riskScore,
-    face_match_score: 96.4,
+    face_match_score: isNonDocument ? 0.0 : 96.4,
     tamper_score: tamperScore,
-    mrz_valid: isTamperedScenario ? "FAIL" : "PASS",
+    mrz_valid: isValidFormat ? "PASS" : "FAIL",
     blacklist_status: isBlacklisted ? "HIT" : "CLEAN",
-    expiry_status: "VALID",
+    expiry_status: isNonDocument ? "INVALID" : "VALID",
     risk_factors: riskFactors,
     extracted_fields: resultObj.extracted_fields,
     officer_decision: "PENDING"
@@ -393,10 +415,10 @@ export const api = {
     } catch (err) {
       console.warn('Backend offline for OCR extraction', err);
     }
-    // Backend offline — return empty fields (user fills manually)
+    // Backend offline — return null validity so client OCR does strict validation
     return {
       success: false,
-      is_valid_document: true,
+      is_valid_document: null,
       detected_document_type: null,
       extracted_fields: {}
     };

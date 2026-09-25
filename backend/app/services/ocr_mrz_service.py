@@ -287,29 +287,43 @@ class OCRMRZService:
             aspect = float(w) / float(h)
 
             # 1. Aspect ratio check (Standard documents are ~0.70 portrait or ~1.4 - 1.6 landscape)
-            if aspect < 0.40 or aspect > 2.6:
+            if aspect < 0.45 or aspect > 2.3:
                 return False, "INVALID_ASPECT_RATIO", {
                     "reason": f"Aspect ratio ({aspect:.2f}) does not match standard government credential format."
                 }
 
-            # 2. Map & Terrain Detection (Rejects street maps, satellite, outdoor photos)
+            # 2. Map & Terrain Detection (Rejects street maps, satellite, outdoor photos, charts)
             hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
-            green_mask = cv2.inRange(hsv, (35, 40, 40), (85, 255, 255))
-            blue_mask = cv2.inRange(hsv, (90, 40, 40), (130, 255, 255))
-            terrain_ratio = (np.sum(green_mask > 0) + np.sum(blue_mask > 0)) / float(h * w)
+            # Broader detection for map greens, water blues, pastel fills
+            green_mask = cv2.inRange(hsv, (30, 20, 80), (88, 255, 255))
+            blue_mask = cv2.inRange(hsv, (85, 20, 80), (135, 255, 255))
+            yellow_road_mask = cv2.inRange(hsv, (15, 30, 120), (30, 255, 255))
+            terrain_ratio = (np.sum(green_mask > 0) + np.sum(blue_mask > 0) + np.sum(yellow_road_mask > 0)) / float(h * w)
 
             # QR check
             qr_data = OCRMRZService._scan_qr_robust(img_bgr)
             has_qr = bool(qr_data and len(qr_data.strip()) > 5)
 
+            # Facial portrait check
+            has_face = False
+            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+            try:
+                face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                if os.path.exists(face_cascade_path):
+                    face_cascade = cv2.CascadeClassifier(face_cascade_path)
+                    faces = face_cascade.detectMultiScale(gray, 1.1, 3, minSize=(30, 30))
+                    if len(faces) > 0:
+                        has_face = True
+            except Exception:
+                pass
+
             # If large map terrain / water bodies are present and no QR code exists -> reject map
-            if terrain_ratio > 0.15 and not has_qr:
+            if terrain_ratio > 0.12 and not has_qr and not has_face:
                 return False, "INVALID_NON_IDENTITY_IMAGE", {
-                    "reason": "Image contains map tiles/geographic terrain rather than a government identity credential."
+                    "reason": "Image contains map tiles, street plans, or geographic terrain rather than a government identity credential."
                 }
 
             # 3. Document Paper / Card Background Check
-            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
             mean_intensity = float(np.mean(gray))
 
             # Reject completely black or unreadable dark images
@@ -322,14 +336,29 @@ class OCRMRZService:
             edges = cv2.Canny(gray, 50, 150)
             edge_density = float(np.sum(edges > 0)) / float(gray.size)
 
-            # Reject chaotic noise / extreme textures without QR
-            if edge_density > 0.35 and not has_qr:
+            # Reject chaotic noise / extreme textures without QR or Face
+            if edge_density > 0.30 and not has_qr and not has_face:
                 return False, "INVALID_NON_IDENTITY_IMAGE", {
-                    "reason": "Image texture is too noisy or complex for a document layout."
+                    "reason": "Image texture is too noisy or complex for a document layout (likely a photo, drawing, or map)."
                 }
+
+            # 5. Requirement: Genuine Indian/International ID credentials require either a QR code, facial portrait, or verified document OCR text
+            if not has_qr and not has_face:
+                ocr_text = OCRMRZService._ocr_image_text(img_bgr).upper()
+                has_doc_keywords = any(kw in ocr_text for kw in [
+                    'AADHAAR', 'UIDAI', 'UNIQUE IDENTIFICATION', 'INCOME TAX',
+                    'PERMANENT ACCOUNT', 'PAN', 'PASSPORT', 'ELECTION COMMISSION',
+                    'ELECTOR', 'DRIVING LICEN', 'UNION OF INDIA', 'GOVERNMENT OF INDIA',
+                    'MERA AADHAAR', 'MERI PEHCHAN', 'EPIC'
+                ])
+                if not has_doc_keywords:
+                    return False, "INVALID_NON_IDENTITY_IMAGE", {
+                        "reason": "Image lacks biometric facial portrait, cryptographic QR code, and recognized Government Identity credential markings."
+                    }
 
             return True, "VALID_IDENTITY_TEMPLATE", {
                 "has_qr": has_qr,
+                "has_face": has_face,
                 "mean_intensity": round(mean_intensity, 1),
                 "terrain_ratio": round(terrain_ratio, 3),
                 "aspect_ratio": round(aspect, 2)

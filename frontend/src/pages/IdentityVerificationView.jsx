@@ -99,11 +99,15 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
         // 1. Run Backend Extraction (QR Code + Server-side OCR)
         let backendFields = {};
         let backendType = null;
+        let backendIsValid = null;
         try {
           const extractRes = await api.extractDocumentFields(base64Data);
-          if (extractRes?.is_valid_document !== false && extractRes?.extracted_fields) {
-            backendFields = extractRes.extracted_fields;
-            backendType = extractRes.detected_document_type;
+          if (extractRes) {
+            backendIsValid = extractRes.is_valid_document;
+            if (extractRes.is_valid_document !== false && extractRes.extracted_fields) {
+              backendFields = extractRes.extracted_fields;
+              backendType = extractRes.detected_document_type;
+            }
           }
         } catch (e) {
           console.warn('Backend extract skipped, continuing with browser OCR:', e);
@@ -112,14 +116,35 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
         // 2. Run High-Accuracy Browser OCR (Tesseract.js)
         let clientFields = {};
         let clientType = null;
+        let clientIsValid = null;
         try {
           const clientRes = await ocrService.extractFromImage(base64Data, backendType || docType);
-          if (clientRes?.success && clientRes?.fields) {
-            clientFields = clientRes.fields;
-            clientType = clientRes.detectedType;
+          if (clientRes) {
+            clientIsValid = clientRes.is_valid_document;
+            if (clientRes.success && clientRes.fields) {
+              clientFields = clientRes.fields;
+              clientType = clientRes.detectedType;
+            }
           }
         } catch (e) {
           console.warn('Client OCR error:', e);
+        }
+
+        // Check if any fields were successfully captured
+        const hasExtractedFields = Object.keys(backendFields).length > 0 || Object.keys(clientFields).length > 0;
+        const isInvalid = (backendIsValid === false && !hasExtractedFields) || (clientIsValid === false && !hasExtractedFields);
+
+        if (!hasExtractedFields && isInvalid) {
+          setFields({});
+          setDetectedDocType(null);
+          setExtractStatus({
+            type: 'error',
+            message: '❌ Invalid Document: The uploaded image is not recognized as a valid Government Identity Document (Aadhaar, Voter ID, Driving License, PAN, or Passport). Please upload a valid official ID document.'
+          });
+          setMismatchError({
+            message: 'Invalid Document: The uploaded image does not contain official Government Identity credentials. Please upload a clear photo of an Aadhaar Card, Voter ID, or Driving License.'
+          });
+          return;
         }
 
         // 3. Merge fields (preserve real non-empty values)

@@ -135,28 +135,9 @@ class ForensicsEngine:
         Checks for presence, decodes cryptographic payload, and verifies signature pattern.
         """
         try:
-            detector = cv2.QRCodeDetector()
-            qr_data, bbox, _ = detector.detectAndDecode(img_bgr)
-            
-            # If standard detector missed it, try multi-scale detection
-            has_qr = bool(qr_data and len(qr_data.strip()) > 0)
-            
-            if not has_qr:
-                # Check for high-density square QR / Barcode pattern in image via contours
-                gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-                blur = cv2.GaussianBlur(gray, (5, 5), 0)
-                thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
-                contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-                
-                for cnt in contours:
-                    approx = cv2.approxPolyDP(cnt, 0.04 * cv2.arcLength(cnt, True), True)
-                    if len(approx) == 4 and cv2.contourArea(cnt) > 2000:
-                        x, y, w, h = cv2.boundingRect(approx)
-                        ratio = float(w) / float(h)
-                        if 0.85 <= ratio <= 1.15: # Square shape typical of QR pattern
-                            has_qr = True
-                            qr_data = "SECURE_QR_CODE_SIGNATURE_PATTERN_DETECTED"
-                            break
+            from app.services.ocr_mrz_service import OCRMRZService
+            qr_data = OCRMRZService._scan_qr_robust(img_bgr)
+            has_qr = bool(qr_data and len(qr_data.strip()) > 5)
 
             if has_qr:
                 decoded_info = {

@@ -76,17 +76,13 @@ export default function DocumentScreeningView({ onInspectResult }) {
         selfie_image_base64: selfieImage || null,
         mrz_text: mrzText || null,
         document_type: docType,
-        extracted_fields: customExtractedFields || {
-          full_name: "PAVITHRAN",
-          document_number: "XXXX XXXX 2227",
-          dob: "15/08/2003",
-          address: "No. 42, Pillayar Kovil Street, Anna Nagar, Chennai 600040"
-        }
+        extracted_fields: customExtractedFields || null
       });
 
       setScreeningResult(result);
     } catch (err) {
       console.error(err);
+      setError(err.message || 'Screening failed');
     } finally {
       setLoading(false);
     }
@@ -102,15 +98,23 @@ export default function DocumentScreeningView({ onInspectResult }) {
         setSelfieImage('');
         setActiveSampleKey('');
         setScreeningResult(null);
+        setError('');
 
         // Auto extract fields
         try {
           const ext = await api.extractDocumentFields(base64Data);
-          if (ext && ext.extracted_fields) {
+          if (ext?.is_valid_document === false) {
+            setError('❌ Invalid Document: Uploaded image is not a recognized Government Identity Document template.');
+            setCustomExtractedFields(null);
+            return;
+          }
+          if (ext && ext.extracted_fields && Object.keys(ext.extracted_fields).length > 0) {
             setCustomExtractedFields(ext.extracted_fields);
             if (ext.extracted_fields.document_type) {
               setDocType(ext.extracted_fields.document_type);
             }
+          } else {
+            setCustomExtractedFields(null);
           }
         } catch (err) {
           console.warn('Field extraction err:', err);
