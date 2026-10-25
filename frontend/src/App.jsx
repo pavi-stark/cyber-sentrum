@@ -10,6 +10,7 @@ import DocumentScreeningView from './pages/DocumentScreeningView';
 import DashboardView from './pages/DashboardView';
 import SuspiciousCasesView from './pages/SuspiciousCasesView';
 import VerificationHistoryView from './pages/VerificationHistoryView';
+import CitizenRegistryView from './pages/CitizenRegistryView';
 import WatchlistManager from './pages/WatchlistManager';
 import SecurityPrivacyView from './pages/SecurityPrivacyView';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
@@ -89,6 +90,9 @@ export default function App() {
         )}
         {activeTab === 'suspicious' && (
           <SuspiciousCasesView onInspectResult={handleInspectResult} />
+        )}
+        {activeTab === 'registry' && (
+          <CitizenRegistryView onNavigateToVerification={() => setActiveTab('identity')} />
         )}
         {activeTab === 'watchlist' && (
           <WatchlistManager />

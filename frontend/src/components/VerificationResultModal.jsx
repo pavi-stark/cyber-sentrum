@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { 
   ShieldCheck, AlertTriangle, ShieldAlert, CheckCircle2, XCircle, 
   Download, Printer, RotateCcw, Share2, FileCheck, UserCheck, 
-  Flame, Database, Clock, X, ExternalLink
+  Flame, Database, Clock, X, ExternalLink, AlertOctagon
 } from 'lucide-react';
 
 export default function VerificationResultModal({ isOpen, onClose, result, onVerifyAgain, onSendForReview }) {
@@ -18,7 +18,8 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
     forensics = {},
     biometrics = {},
     blacklist = {},
-    validity = {}
+    validity = {},
+    database_verification = {}
   } = result;
 
   const score = risk_assessment?.composite_risk_score ?? 15;
@@ -66,7 +67,7 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
     downloadAnchor.remove();
   };
 
-  // Structured Checklist of 6 Core Verifications
+  // Structured Checklist of 7 Core Multimodal Verifications
   const verificationChecks = [
     {
       title: 'Identity Demographics Information',
@@ -76,9 +77,17 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
     },
     {
       title: 'Document Authenticity & Checksum',
-      desc: 'ICAO 9303 7-3-1 weight sum check digits / UIDAI Verhoeff algorithm / PAN entity structure',
+      desc: 'ICAO 9303 / UIDAI Verhoeff algorithm / Check Digit validation',
       passed: Boolean(mrz_data?.checksum_valid ?? true),
       statusText: (mrz_data?.checksum_valid ?? true) ? 'Passed' : 'Failed'
+    },
+    {
+      title: 'Authoritative Central Database Cross-Match',
+      desc: database_verification?.registry || 'Authoritative National Citizen Registry (UIDAI CIDR / MoRTH / ECI)',
+      passed: database_verification?.is_verified !== false,
+      statusText: database_verification?.is_verified !== false 
+        ? `Passed (${database_verification?.match_percentage || 100}%)` 
+        : `Failed (${database_verification?.status || 'Mismatch'})`
     },
     {
       title: 'Biometric Face Match & Liveness',
@@ -99,7 +108,7 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
       statusText: (forensics?.tamper_score ?? 5) < 40 ? 'Passed (Clean)' : 'Failed (Tampered)'
     },
     {
-      title: 'Security Watchlist & Interpol Screening',
+      title: 'Security Watchlist & Blacklist Screening',
       desc: 'Real-time lookup across international stolen travel documents & national blacklist registry',
       passed: !blacklist?.is_blacklisted,
       statusText: !blacklist?.is_blacklisted ? 'Passed (Clean)' : 'Failed (Watchlist Hit)'
@@ -108,7 +117,7 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto animate-fadeIn flex flex-col">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto animate-fadeIn flex flex-col">
         
         {/* Modal Top Action Bar */}
         <div className="p-4 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm">
@@ -180,8 +189,8 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
               <div className="font-bold text-blue-600 font-mono mt-0.5 truncate">{extracted_fields?.document_number || 'N/A'}</div>
             </div>
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-              <span className="text-[10px] font-mono text-slate-400 uppercase">Document Type</span>
-              <div className="font-bold text-slate-800 mt-0.5">{document_type || 'PASSPORT'}</div>
+              <span className="text-[10px] font-mono text-slate-400 uppercase">Document Structure</span>
+              <div className="font-bold text-slate-800 mt-0.5">{document_type || 'AADHAAR_CARD'}</div>
             </div>
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
               <span className="text-[10px] font-mono text-slate-400 uppercase">Verification Date</span>
@@ -195,7 +204,7 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono">
                 Multimodal AI Verification Breakdown
               </h4>
-              <span className="text-[11px] text-slate-500 font-medium">6 Automated Sub-system Checks</span>
+              <span className="text-[11px] text-slate-500 font-medium">7 Automated Sub-system Checks</span>
             </div>
 
             <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
@@ -233,6 +242,32 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
             </div>
           </div>
 
+          {/* Database Match Card */}
+          {database_verification?.registry && (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-indigo-700 font-bold">
+                  <Database className="h-4 w-4" />
+                  <span>Central Registry Cross-Match Status</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  database_verification.is_verified ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                }`}>
+                  {database_verification.status || 'RECORD_CHECK'}
+                </span>
+              </div>
+              <p className="text-slate-600 font-mono text-[11px]">
+                Registry Source: <strong>{database_verification.registry}</strong>
+              </p>
+              {database_verification.discrepancies && database_verification.discrepancies.length > 0 && (
+                <div className="text-red-700 bg-red-50 p-2.5 rounded-xl border border-red-200">
+                  <span className="font-bold">Discrepancy: </span>
+                  <span>{database_verification.discrepancies.join(', ')}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Risk Justifications if any */}
           {risk_assessment?.risk_factors && risk_assessment.risk_factors.length > 0 && (
             <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2">
@@ -246,10 +281,10 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
                       rf.severity === 'CRITICAL' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
                     }`}>
-                      {rf.severity}
+                      {rf.severity || 'HIGH'}
                     </span>
                     <div>
-                      <span className="font-semibold text-slate-800">{rf.title}: </span>
+                      <span className="font-semibold text-slate-800">{rf.factor || rf.title}: </span>
                       <span className="text-slate-600">{rf.description}</span>
                     </div>
                   </div>
@@ -264,7 +299,7 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
               <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
               <span>Digital SHA-256 Signature: 4f8a92...b8310c (Verified)</span>
             </div>
-            <span>CYBER SENTRY KYC ENGINE v1.0.0</span>
+            <span>CYBER SENTRY KYC ENGINE v2.0.0</span>
           </div>
 
         </div>
@@ -273,7 +308,7 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
         <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3 sticky bottom-0 z-10">
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 transition"
+            className="w-full sm:w-auto px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 transition cursor-pointer"
           >
             Close Window
           </button>
@@ -285,7 +320,7 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
                   onSendForReview(session_id);
                   onClose();
                 }}
-                className="flex-1 sm:flex-initial px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-semibold transition shadow-sm flex items-center justify-center space-x-1.5"
+                className="flex-1 sm:flex-initial px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-semibold transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <AlertTriangle className="h-3.5 w-3.5" />
                 <span>Send for Manual Review</span>
@@ -298,7 +333,7 @@ export default function VerificationResultModal({ isOpen, onClose, result, onVer
                   onVerifyAgain();
                   onClose();
                 }}
-                className="flex-1 sm:flex-initial px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition shadow-sm flex items-center justify-center space-x-1.5"
+                className="flex-1 sm:flex-initial px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition shadow-sm flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 <span>Start New Verification</span>

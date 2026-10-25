@@ -73,6 +73,176 @@ class SampleFactory:
         width, height = 800, 520
         selfie_im = Image.new("RGB", (320, 360), color=(225, 230, 240))
         selfie_draw = ImageDraw.Draw(selfie_im)
+
+        # -------------------------------------------------------------
+        # APPROVED DOCUMENT STRUCTURES (User Uploaded Real Formats)
+        # -------------------------------------------------------------
+        from pathlib import Path
+        sample_dir = Path(__file__).resolve().parent.parent / "data" / "samples"
+
+        if case_key == "aadhaar_dilip":
+            img_path = sample_dir / "aadhaar_dilip.png"
+            with open(img_path, "rb") as f:
+                img_bytes = f.read()
+            b64_doc = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+            return {
+                "key": "aadhaar_dilip",
+                "title": "Aadhaar Card: Dilip Mehti (4078 7264 6921)",
+                "document_type": "AADHAAR_CARD",
+                "expected_outcome": "LOW",
+                "mrz_text": "",
+                "extracted_fields": {
+                    "document_type": "AADHAAR_CARD",
+                    "document_number": "4078 7264 6921",
+                    "full_name": "DILIP MEHTI",
+                    "dob": "02/01/2003",
+                    "gender": "MALE",
+                    "father_or_guardian": "INDRA MAHTO",
+                    "address": "S/O Indra Mahto, VTC: Chanho, PO: Chanho, Sub District: Chanho, District: Lohardaga, State: Jharkhand, PIN Code: 835214",
+                    "enrollment_no": "0818/63130/04041",
+                    "issuing_authority": "Unique Identification Authority of India (UIDAI)"
+                },
+                "doc_image_base64": b64_doc,
+                "selfie_image_base64": None,
+                "doc_bytes": img_bytes,
+                "selfie_bytes": None
+            }
+
+        elif case_key == "voter_epic":
+            img_path = sample_dir / "voter_epic.png"
+            with open(img_path, "rb") as f:
+                img_bytes = f.read()
+            b64_doc = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+            return {
+                "key": "voter_epic",
+                "title": "ECI Voter ID: Subhash Chandra Roy (FSZ2007891)",
+                "document_type": "VOTER_ID",
+                "expected_outcome": "LOW",
+                "mrz_text": "",
+                "extracted_fields": {
+                    "document_type": "VOTER_ID",
+                    "document_number": "FSZ2007891",
+                    "full_name": "SUBHASH CHANDRA ROY",
+                    "dob": "12/05/1982",
+                    "gender": "MALE",
+                    "father_or_guardian": "DHIRENDRA NATH ROY",
+                    "address": "Village/Ward 14, P.S. Barrackpore, Dist. North 24 Parganas, West Bengal - 700120",
+                    "state": "WEST BENGAL",
+                    "issuing_authority": "Election Commission of India (ECI)"
+                },
+                "doc_image_base64": b64_doc,
+                "selfie_image_base64": None,
+                "doc_bytes": img_bytes,
+                "selfie_bytes": None
+            }
+
+        elif case_key == "dl_bhaskar":
+            img_path = sample_dir / "dl_bhaskar.png"
+            with open(img_path, "rb") as f:
+                img_bytes = f.read()
+            b64_doc = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+            return {
+                "key": "dl_bhaskar",
+                "title": "Driving Licence: Bhaskar Adhikary (WB23 20150223071)",
+                "document_type": "DRIVING_LICENSE",
+                "expected_outcome": "LOW",
+                "mrz_text": "",
+                "extracted_fields": {
+                    "document_type": "DRIVING_LICENSE",
+                    "document_number": "WB23 20150223071",
+                    "full_name": "BHASKAR ADHIKARY",
+                    "dob": "14-03-1974",
+                    "gender": "MALE",
+                    "father_or_guardian": "NARAYAN ADHIKARY",
+                    "issue_date": "08-04-2015",
+                    "expiry_date": "13-03-2034",
+                    "blood_group": "U",
+                    "organ_donor": "N",
+                    "address": "6 SCHOOL LANE NALTA DUM DUM CANTT N24PGS PO PS DUM DUM KOLKATA WEST BENGAL BARRACKPUR - I,24 PARGANAS NORTH 700028",
+                    "state": "WEST BENGAL",
+                    "issuing_authority": "Government of West Bengal / MoRTH SARATHI"
+                },
+                "doc_image_base64": b64_doc,
+                "selfie_image_base64": None,
+                "doc_bytes": img_bytes,
+                "selfie_bytes": None
+            }
+
+        elif case_key == "dl_mismatch":
+            img_path = sample_dir / "dl_bhaskar.png"
+            with open(img_path, "rb") as f:
+                img_bytes = f.read()
+            b64_doc = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+            return {
+                "key": "dl_mismatch",
+                "title": "Fraud Alert: Driving Licence with Spliced Name",
+                "document_type": "DRIVING_LICENSE",
+                "expected_outcome": "HIGH",
+                "mrz_text": "",
+                "extracted_fields": {
+                    "document_type": "DRIVING_LICENSE",
+                    "document_number": "WB23 20150223071",
+                    "full_name": "VIJAY MALHOTRA",  # Altered name! Real is BHASKAR ADHIKARY
+                    "dob": "14-03-1974",
+                    "gender": "MALE",
+                    "father_or_guardian": "NARAYAN ADHIKARY",
+                    "issue_date": "08-04-2015",
+                    "expiry_date": "13-03-2034",
+                    "blood_group": "U",
+                    "organ_donor": "N",
+                    "address": "6 SCHOOL LANE NALTA DUM DUM",
+                    "state": "WEST BENGAL",
+                    "issuing_authority": "Government of West Bengal"
+                },
+                "doc_image_base64": b64_doc,
+                "selfie_image_base64": None,
+                "doc_bytes": img_bytes,
+                "selfie_bytes": None
+            }
+
+        elif case_key == "fake_unregistered":
+            img_path = sample_dir / "dl_bhaskar.png"
+            with open(img_path, "rb") as f:
+                img_bytes = f.read()
+            b64_doc = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+            return {
+                "key": "fake_unregistered",
+                "title": "Counterfeit Alert: Unregistered DL Number",
+                "document_type": "DRIVING_LICENSE",
+                "expected_outcome": "HIGH",
+                "mrz_text": "",
+                "extracted_fields": {
+                    "document_type": "DRIVING_LICENSE",
+                    "document_number": "WB99 20269999999",  # Fake number!
+                    "full_name": "UNKNOWN FORGER",
+                    "dob": "01-01-2000",
+                    "gender": "MALE",
+                    "father_or_guardian": "FAKE GUARDIAN",
+                    "state": "WEST BENGAL"
+                },
+                "doc_image_base64": b64_doc,
+                "selfie_image_base64": None,
+                "doc_bytes": img_bytes,
+                "selfie_bytes": None
+            }
+
+        elif case_key == "rejected_structure":
+            blank_im = Image.new("RGB", (400, 400), color=(220, 220, 220))
+            buf = io.BytesIO()
+            blank_im.save(buf, format="JPEG")
+            b64_blank = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+            return {
+                "key": "rejected_structure",
+                "title": "Structure Rejection Test: Non-Document Graphic",
+                "document_type": "AADHAAR_CARD",
+                "expected_outcome": "HIGH",
+                "mrz_text": "",
+                "extracted_fields": {},
+                "doc_image_base64": b64_blank,
+                "selfie_image_base64": None,
+                "doc_bytes": buf.getvalue(),
+                "selfie_bytes": None
+            }
         
         # -------------------------------------------------------------
         # 1. INDIAN AADHAAR CARD CASES

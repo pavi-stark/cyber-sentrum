@@ -22,11 +22,12 @@ export default function Navbar({
 
   const navItems = [
     { id: 'identity', label: 'Identity Verification', icon: UserCheck },
+    { id: 'registry', label: 'Citizen Database', icon: Database, badge: 'SQL' },
     { id: 'ai-hub', label: 'AI Model & Dataset', icon: Cpu, badge: 'ML' },
     { id: 'document', label: 'Document Forensics & QR', icon: FileCheck },
     { id: 'dashboard', label: 'Dashboard & Metrics', icon: LayoutDashboard },
     { id: 'suspicious', label: 'Suspicious Queue', icon: ShieldAlert, badge: 'Live' },
-    { id: 'watchlist', label: 'Citizen Database & Watchlist', icon: Database },
+    { id: 'watchlist', label: 'Watchlist', icon: ShieldAlert },
     { id: 'history', label: 'Verification History', icon: History },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 }
   ];

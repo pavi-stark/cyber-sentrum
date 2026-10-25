@@ -15,6 +15,7 @@ from app.services.national_id_service import NationalIDValidator
 from app.services.forensics_service import ForensicsEngine
 from app.services.face_service import FaceBiometricService
 from app.services.risk_service import RiskScorer
+from app.services.registry_service import RegistryService
 
 router = APIRouter(prefix="/api/screen", tags=["Document & Identity Screening"])
 
@@ -136,12 +137,30 @@ def process_screening_json(
 
         submitted_type = _normalize_doc_type(payload.document_type or "AADHAAR_CARD")
 
-        # Document type mismatch enforcement
+        # Strict Document Structure Validation (Exclusively accepts Aadhaar, Voter ID, Driving Licence)
         detection = OCRMRZService.detect_document_type(doc_bytes)
         detected_type = detection.get("detected_type")
         detection_confidence = detection.get("confidence", "LOW")
 
-        if (detected_type
+        if not detection.get("detected") or detected_type not in ("AADHAAR_CARD", "VOTER_ID", "DRIVING_LICENSE"):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "DOCUMENT_STRUCTURE_REJECTED",
+                    "message": (
+                        "Document structure rejected. This screening portal strictly accepts only the 3 approved "
+                        "Indian Government identity structures: 1) UIDAI Aadhaar Card, 2) ECI Voter ID (EPIC), "
+                        "and 3) Indian Union Driving Licence. The uploaded image does not conform to any of these."
+                    ),
+                    "accepted_structures": ["AADHAAR_CARD", "VOTER_ID", "DRIVING_LICENSE"],
+                    "detected_type": None
+                }
+            )
+
+        # Auto-align submitted_type if not specified or set to generic/auto
+        if not payload.document_type or payload.document_type in ("AUTO", "ALL") or submitted_type not in ("AADHAAR_CARD", "VOTER_ID", "DRIVING_LICENSE"):
+            submitted_type = detected_type
+        elif (detected_type
                 and detection_confidence == "HIGH"
                 and detected_type != submitted_type):
             detected_label = DOC_TYPE_LABELS.get(detected_type, detected_type)
@@ -229,7 +248,7 @@ def _execute_screening_pipeline(
         input_data = {
             "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
             "full_name": effective_fields.get("full_name", "Verified Applicant"),
-            "dob": effective_fields.get("dob", "01/01/1990"),
+            "dob": effective_fields.get("dob", ""),
             "sex": effective_fields.get("gender", effective_fields.get("sex", "M")),
             "address": effective_fields.get("address", "")
         }
@@ -248,7 +267,7 @@ def _execute_screening_pipeline(
         input_data = {
             "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
             "full_name": effective_fields.get("full_name", "Verified Applicant"),
-            "dob": effective_fields.get("dob", "01/01/1990")
+            "dob": effective_fields.get("dob", "")
         }
         val_res = NationalIDValidator.validate_pan(input_data)
         fields = val_res["fields"]
@@ -265,7 +284,7 @@ def _execute_screening_pipeline(
         input_data = {
             "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
             "full_name": effective_fields.get("full_name", "Verified Applicant"),
-            "dob": effective_fields.get("dob", "01/01/1990"),
+            "dob": effective_fields.get("dob", ""),
             "expiry_date": effective_fields.get("expiry_date", "")
         }
         val_res = NationalIDValidator.validate_driving_license(input_data)
@@ -282,7 +301,7 @@ def _execute_screening_pipeline(
         input_data = {
             "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
             "full_name": effective_fields.get("full_name", "Verified Applicant"),
-            "dob": effective_fields.get("dob", "01/01/1990"),
+            "dob": effective_fields.get("dob", ""),
             "constituency": effective_fields.get("constituency", "")
         }
         val_res = NationalIDValidator.validate_voter_id(input_data)
@@ -300,7 +319,7 @@ def _execute_screening_pipeline(
         input_data = {
             "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
             "full_name": effective_fields.get("full_name", "Verified Applicant"),
-            "dob": effective_fields.get("dob", "01/01/1990"),
+            "dob": effective_fields.get("dob", ""),
             "visa_class": effective_fields.get("visa_class", "TOURIST / MULTI-ENTRY")
         }
         val_res = NationalIDValidator.validate_visa(input_data)
@@ -330,7 +349,7 @@ def _execute_screening_pipeline(
                     "document_number": effective_fields.get("document_number", "UNSPECIFIED"),
                     "full_name": effective_fields.get("full_name", "Verified Applicant"),
                     "nationality": effective_fields.get("nationality", "IND"),
-                    "dob": effective_fields.get("dob", "01/01/1990"),
+                    "dob": effective_fields.get("dob", ""),
                     "sex": effective_fields.get("sex", "M"),
                     "expiry_date": effective_fields.get("expiry_date", "01/01/2030")
                 }
@@ -365,27 +384,17 @@ def _execute_screening_pipeline(
             }
 
     # 5. Database Cross-Match Verification
-    # Matches extracted document fields against the Government Central Identity Registry
-    db_match_found = True
-    db_match_notes = "Official record confirmed in National Identity Registry (UIDAI / MoRTH / Passport Seva)."
-    
+    # Matches extracted document fields against authoritative Government Central Identity Database
+    database_verification = RegistryService.verify_document_against_database(
+        doc_type=doc_type_upper,
+        doc_number=doc_number,
+        extracted_fields=fields,
+        db=db
+    )
     if blacklist_hit:
-        db_match_found = False
-        db_match_notes = f"SECURITY ALERT: Record flagged in Watchlist Registry ({blacklist_match_data.get('reason')})."
-    elif forensics_result.get("tamper_score", 0) > 50:
-        db_match_found = False
-        db_match_notes = "DISCREPANCY: Digital modifications detected on document surface; record integrity mismatch."
-    elif not validation_data.get("checksum_valid", True):
-        db_match_found = False
-        db_match_notes = "CHECKSUM CORRUPTED: Algorithmic check digits do not match national issuing standard."
-
-    database_verification = {
-        "status": "MATCHED" if db_match_found else "FLAGGED_MISMATCH",
-        "match_percentage": 100 if db_match_found else 35,
-        "is_verified": db_match_found,
-        "registry": "National Central Identity Repository (CIDR / UIDAI / Passport Seva)",
-        "details": db_match_notes
-    }
+        database_verification["is_verified"] = False
+        database_verification["status"] = "WATCHLIST_ALERT"
+        database_verification["details"] = f"CRITICAL WATCHLIST HIT: {blacklist_match_data.get('reason')}"
 
     # 6. Expiry Validity Status
     expiry_info = _parse_expiry_status(fields.get("expiry_date"))
@@ -399,6 +408,37 @@ def _execute_screening_pipeline(
         blacklist_details=blacklist_match_data,
         expiry_info=expiry_info
     )
+
+    # Incorporate Database Verification Verdict into Risk Scorer
+    if not database_verification.get("is_verified", True):
+        db_st = database_verification.get("status")
+        if db_st == "NOT_FOUND_IN_REGISTRY":
+            risk_assessment["composite_risk_score"] = max(risk_assessment.get("composite_risk_score", 0), 75.0)
+            risk_assessment["risk_level"] = "HIGH"
+            risk_assessment["verdict"] = "REJECT"
+            risk_assessment["risk_factors"].append({
+                "factor": "Database Record Not Found",
+                "score_impact": 75,
+                "description": f"Document number '{doc_number}' was not found in the official National Citizen Database."
+            })
+        elif db_st == "RECORD_MISMATCH":
+            risk_assessment["composite_risk_score"] = max(risk_assessment.get("composite_risk_score", 0), 80.0)
+            risk_assessment["risk_level"] = "HIGH"
+            risk_assessment["verdict"] = "REJECT"
+            risk_assessment["risk_factors"].append({
+                "factor": "Identity Record Discrepancy",
+                "score_impact": 80,
+                "description": "Extracted details do not match the official citizen record in the National Registry."
+            })
+        elif "REVOKED" in str(db_st) or "SUSPENDED" in str(db_st):
+            risk_assessment["composite_risk_score"] = 95.0
+            risk_assessment["risk_level"] = "HIGH"
+            risk_assessment["verdict"] = "REJECT"
+            risk_assessment["risk_factors"].append({
+                "factor": f"Official Registry Status: {db_st}",
+                "score_impact": 95,
+                "description": "Authoritative registry records show this identity credential has been cancelled/revoked."
+            })
 
     # 8. Persist to Database Audit Trail
     log_entry = ScreeningLog(

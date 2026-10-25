@@ -10,6 +10,8 @@ from app.api.demo_samples import router as samples_router
 from app.api.digilocker import router as digilocker_router
 from app.api.ml_training import router as ml_router
 from app.api.auth import router as auth_router
+from app.api.registry import router as registry_router
+from app.services.registry_service import RegistryService
 
 from app.core.security import RateLimitMiddleware, SecurityHeadersMiddleware
 
@@ -43,6 +45,7 @@ app.include_router(samples_router)
 app.include_router(digilocker_router)
 app.include_router(ml_router)
 app.include_router(auth_router)
+app.include_router(registry_router)
 
 from app.models.screening_log import ScreeningLog
 from datetime import datetime, timedelta, timezone
@@ -86,8 +89,8 @@ def startup_event():
             db.add_all(default_records)
             db.commit()
 
-        # Keep watchlist reference alerts
-        pass
+        # Auto-seed Authoritative Government Identity Registry Database
+        RegistryService.seed_registry_defaults(db)
     finally:
         db.close()
 
@@ -102,6 +105,8 @@ frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "di
 
 if frontend_dist.exists() and (frontend_dist / "index.html").exists():
     app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="static_assets")
+    if (frontend_dist / "samples").exists():
+        app.mount("/samples", StaticFiles(directory=str(frontend_dist / "samples")), name="static_samples")
 
     @app.get("/")
     async def serve_frontend_root():

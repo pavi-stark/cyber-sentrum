@@ -5,84 +5,68 @@ router = APIRouter(prefix="/api/samples", tags=["Demo Test Samples"])
 
 SAMPLE_CATALOG = [
     {
+        "key": "aadhaar_dilip",
+        "name": "Structure 1: UIDAI Aadhaar Card (Dilip Mehti)",
+        "description": "Authentic e-Aadhaar sheet structure with UIDAI header, 12-digit number (4078 7264 6921), and confirmed database record.",
+        "expected_risk": "LOW",
+        "document_type": "AADHAAR_CARD",
+        "category": "Approved Structure 1"
+    },
+    {
+        "key": "voter_epic",
+        "name": "Structure 2: ECI Voter ID (Subhash Chandra Roy)",
+        "description": "Authentic ECI Elector Photo Identity Card structure with top barcode (FSZ2007891) and confirmed electoral roll registry.",
+        "expected_risk": "LOW",
+        "document_type": "VOTER_ID",
+        "category": "Approved Structure 2"
+    },
+    {
+        "key": "dl_bhaskar",
+        "name": "Structure 3: Indian Union Driving Licence (Bhaskar Adhikary)",
+        "description": "Authentic Indian Union Driving Licence smart card structure (WB23 20150223071) with EMV chip and confirmed SARATHI registry.",
+        "expected_risk": "LOW",
+        "document_type": "DRIVING_LICENSE",
+        "category": "Approved Structure 3"
+    },
+    {
+        "key": "dl_mismatch",
+        "name": "Fraud Case 4: Name Altered vs Database Record",
+        "description": "Driving Licence where applicant name has been digitally forged. Triggers RECORD_MISMATCH against government registry.",
+        "expected_risk": "HIGH",
+        "document_type": "DRIVING_LICENSE",
+        "category": "Registry Mismatch"
+    },
+    {
+        "key": "fake_unregistered",
+        "name": "Fraud Case 5: Unregistered Credential (Not in Database)",
+        "description": "Counterfeit card with non-existent document number. Triggers NOT_FOUND_IN_REGISTRY alert.",
+        "expected_risk": "HIGH",
+        "document_type": "DRIVING_LICENSE",
+        "category": "Database Alert"
+    },
+    {
+        "key": "rejected_structure",
+        "name": "Rejection Case 6: Unsupported Document Structure",
+        "description": "Non-approved format / non-document image. Triggers immediate DOCUMENT_STRUCTURE_REJECTED.",
+        "expected_risk": "HIGH",
+        "document_type": "REJECTED",
+        "category": "Structure Rejection"
+    },
+    {
         "key": "clean_pass",
-        "name": "Case 1: Standard Genuine Passport",
+        "name": "Standard Genuine Passport",
         "description": "Legitimate passport with matching biometric live face and valid ICAO 9303 checksums.",
         "expected_risk": "LOW",
         "document_type": "PASSPORT",
-        "category": "Passport"
-    },
-    {
-        "key": "altered_dob",
-        "name": "Case 2: Forged / Spliced DOB",
-        "description": "Visual Date of Birth altered digitally. Triggers MRZ Checksum discrepancy & high ELA tamper anomaly.",
-        "expected_risk": "HIGH",
-        "document_type": "PASSPORT",
-        "category": "Passport"
-    },
-    {
-        "key": "swapped_photo",
-        "name": "Case 3: Photo Swapped Impersonator",
-        "description": "Passport portrait replaced with an impostor. Triggers Biometric Facial Mismatch & frame splicing artifacts.",
-        "expected_risk": "HIGH",
-        "document_type": "PASSPORT",
-        "category": "Passport"
-    },
-    {
-        "key": "aadhaar_valid",
-        "name": "Case 4: Genuine Aadhaar Card",
-        "description": "Valid 12-digit Indian Aadhaar number verified with UIDAI Verhoeff Checksum Algorithm.",
-        "expected_risk": "LOW",
-        "document_type": "AADHAAR_CARD",
-        "category": "National ID"
+        "category": "Legacy Test"
     },
     {
         "key": "aadhaar_tampered",
-        "name": "Case 5: Forged Aadhaar (Verhoeff Failed)",
+        "name": "Forged Aadhaar (Verhoeff Failed)",
         "description": "Tampered Aadhaar with invalid check digit (Verhoeff Checksum Failure) & photo splicing.",
         "expected_risk": "HIGH",
         "document_type": "AADHAAR_CARD",
-        "category": "National ID"
-    },
-    {
-        "key": "pan_valid",
-        "name": "Case 6: Genuine PAN Card",
-        "description": "Valid 10-character PAN structure with 'P' entity type and matching surname initial.",
-        "expected_risk": "LOW",
-        "document_type": "PAN_CARD",
-        "category": "National ID"
-    },
-    {
-        "key": "pan_forged",
-        "name": "Case 7: Forged PAN Card",
-        "description": "PAN card with invalid entity code and surname mismatch.",
-        "expected_risk": "HIGH",
-        "document_type": "PAN_CARD",
-        "category": "National ID"
-    },
-    {
-        "key": "visa_valid",
-        "name": "Case 8: Valid Multiple-Entry Visa",
-        "description": "Legitimate consular visa sticker with verified MRZ and entry stamp.",
-        "expected_risk": "LOW",
-        "document_type": "VISA_STICKER",
-        "category": "Visa"
-    },
-    {
-        "key": "blacklisted",
-        "name": "Case 9: Interpol Red Notice Wanted",
-        "description": "Passport matches an active high-priority Interpol security watchlist alert for transnational fraud.",
-        "expected_risk": "HIGH",
-        "document_type": "PASSPORT",
-        "category": "Watchlist Alert"
-    },
-    {
-        "key": "expired",
-        "name": "Case 10: Expired Travel Document",
-        "description": "Document expired past valid travel window. Flagged for officer exception handling.",
-        "expected_risk": "REVIEW",
-        "document_type": "PASSPORT",
-        "category": "Validity Check"
+        "category": "Legacy Test"
     }
 ]
 

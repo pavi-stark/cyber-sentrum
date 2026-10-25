@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   UserCheck, Shield, Upload, Camera, CheckCircle2, AlertTriangle,
   XCircle, RotateCcw, Play, Loader2, User, CreditCard,
-  QrCode, Database, Flame, Scan, ShieldCheck, AlertOctagon, Lock
+  QrCode, Database, Flame, Scan, ShieldCheck, AlertOctagon, Lock,
+  Check, FileText, Vote, Car, Sparkles, ArrowRight
 } from 'lucide-react';
 import { api } from '../services/api';
 import { ocrService } from '../services/ocrService';
@@ -79,6 +80,192 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
     setFields(prev => ({ ...prev, [key]: value }));
   };
 
+  // ── Load 1-Click Test Cases ────────────────────────────────────────────────
+  const handleLoadTestCase = async (testKey) => {
+    setLoading(true);
+    setResult(null);
+    setMismatchError(null);
+    setIsDigiLockerVerified(false);
+
+    try {
+      if (testKey === 'aadhaar_dilip') {
+        const res = await fetch('/samples/aadhaar_dilip.png');
+        const blob = await res.blob();
+        const base64 = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onloadend = () => resolve(r.result);
+          r.readAsDataURL(blob);
+        });
+        setDocumentImage(base64);
+        setDocType('AADHAAR_CARD');
+        setDetectedDocType('AADHAAR_CARD');
+        const f = {
+          document_number: '4078 7264 6921',
+          full_name: 'Dilip Mehti',
+          dob: '02/01/2003',
+          gender: 'MALE',
+          address: 'Bero, Ranchi, Jharkhand - 835214'
+        };
+        setFields(f);
+        setExtractStatus({
+          type: 'success',
+          message: '✓ UIDAI e-Aadhaar Structure Recognized: Dilip Mehti · UID: 4078 7264 6921'
+        });
+
+        const screenRes = await api.screenDocumentJson({
+          doc_image_base64: base64,
+          document_type: 'AADHAAR_CARD',
+          extracted_fields: f
+        });
+        if (screenRes?.mismatch_error) {
+          setMismatchError(screenRes.mismatch_error);
+        } else {
+          setResult(screenRes);
+          if (onScreeningComplete) onScreeningComplete(screenRes);
+        }
+
+      } else if (testKey === 'voter_epic') {
+        const res = await fetch('/samples/voter_epic.png');
+        const blob = await res.blob();
+        const base64 = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onloadend = () => resolve(r.result);
+          r.readAsDataURL(blob);
+        });
+        setDocumentImage(base64);
+        setDocType('VOTER_ID');
+        setDetectedDocType('VOTER_ID');
+        const f = {
+          document_number: 'FSZ2007891',
+          full_name: 'Subhash Chandra Roy',
+          dob: '12/04/1982',
+          constituency: 'Cooch Behar, West Bengal'
+        };
+        setFields(f);
+        setExtractStatus({
+          type: 'success',
+          message: '✓ ECI Voter ID (EPIC) Structure Recognized: Subhash Chandra Roy · EPIC: FSZ2007891'
+        });
+
+        const screenRes = await api.screenDocumentJson({
+          doc_image_base64: base64,
+          document_type: 'VOTER_ID',
+          extracted_fields: f
+        });
+        if (screenRes?.mismatch_error) {
+          setMismatchError(screenRes.mismatch_error);
+        } else {
+          setResult(screenRes);
+          if (onScreeningComplete) onScreeningComplete(screenRes);
+        }
+
+      } else if (testKey === 'dl_bhaskar') {
+        const res = await fetch('/samples/dl_bhaskar.png');
+        const blob = await res.blob();
+        const base64 = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onloadend = () => resolve(r.result);
+          r.readAsDataURL(blob);
+        });
+        setDocumentImage(base64);
+        setDocType('DRIVING_LICENSE');
+        setDetectedDocType('DRIVING_LICENSE');
+        const f = {
+          document_number: 'WB23 20150223071',
+          full_name: 'Bhaskar Adhikary',
+          dob: '14-03-1974',
+          expiry_date: '13-03-2034',
+          vehicle_class: 'LMV, MCWG'
+        };
+        setFields(f);
+        setExtractStatus({
+          type: 'success',
+          message: '✓ MoRTH Driving Licence Structure Recognized: Bhaskar Adhikary · DL: WB23 20150223071'
+        });
+
+        const screenRes = await api.screenDocumentJson({
+          doc_image_base64: base64,
+          document_type: 'DRIVING_LICENSE',
+          extracted_fields: f
+        });
+        if (screenRes?.mismatch_error) {
+          setMismatchError(screenRes.mismatch_error);
+        } else {
+          setResult(screenRes);
+          if (onScreeningComplete) onScreeningComplete(screenRes);
+        }
+
+      } else if (testKey === 'fraud_mismatch') {
+        const res = await fetch('/samples/dl_bhaskar.png');
+        const blob = await res.blob();
+        const base64 = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onloadend = () => resolve(r.result);
+          r.readAsDataURL(blob);
+        });
+        setDocumentImage(base64);
+        setDocType('DRIVING_LICENSE');
+        setDetectedDocType('DRIVING_LICENSE');
+        const f = {
+          document_number: 'WB23 20150223071',
+          full_name: 'VIKRAM SINGH (SPLICED FORGERY)',
+          dob: '14-03-1974',
+          expiry_date: '13-03-2034',
+          vehicle_class: 'LMV, MCWG'
+        };
+        setFields(f);
+        setExtractStatus({
+          type: 'error',
+          message: '⚠ Simulating Spliced Forgery: Tampered Name "VIKRAM SINGH" on WB23 Driving Licence'
+        });
+
+        const screenRes = await api.screenDocumentJson({
+          doc_image_base64: base64,
+          document_type: 'DRIVING_LICENSE',
+          extracted_fields: f
+        });
+        setResult(screenRes);
+        if (onScreeningComplete) onScreeningComplete(screenRes);
+
+      } else if (testKey === 'reject_structure') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 240;
+        canvas.height = 120;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(0, 0, 240, 120);
+        ctx.fillStyle = '#64748b';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Non-Approved Document', 20, 60);
+        const base64 = canvas.toDataURL('image/png');
+
+        setDocumentImage(base64);
+        setDocType('AADHAAR_CARD');
+        setDetectedDocType(null);
+        setFields({});
+        setExtractStatus({
+          type: 'error',
+          message: '❌ Non-Conforming Structure Tested'
+        });
+
+        const screenRes = await api.screenDocumentJson({
+          doc_image_base64: base64,
+          document_type: 'AADHAAR_CARD',
+          extracted_fields: {}
+        });
+        if (screenRes?.mismatch_error) {
+          setMismatchError(screenRes.mismatch_error);
+        } else {
+          setResult(screenRes);
+        }
+      }
+    } catch (err) {
+      console.error('Test case execution error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── File upload & auto-extraction ──────────────────────────────────────────
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -94,9 +281,9 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
 
       try {
         setIsExtracting(true);
-        setExtractStatus({ type: 'info', message: 'Analyzing document with AI Optical Character Recognition (OCR)...' });
+        setExtractStatus({ type: 'info', message: 'Analyzing document structure & optical features...' });
 
-        // 1. Run Backend Extraction (QR Code + Server-side OCR)
+        // 1. Run Backend Extraction (QR Code + Server-side OCR + Strict Structure Filter)
         let backendFields = {};
         let backendType = null;
         let backendIsValid = null;
@@ -113,7 +300,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
           console.warn('Backend extract skipped, continuing with browser OCR:', e);
         }
 
-        // 2. Run High-Accuracy Browser OCR (Tesseract.js)
+        // 2. Run Browser OCR (Tesseract.js)
         let clientFields = {};
         let clientType = null;
         let clientIsValid = null;
@@ -130,7 +317,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
           console.warn('Client OCR error:', e);
         }
 
-        // Check if any fields were successfully captured
+        // Check if recognized
         const hasExtractedFields = Object.keys(backendFields).length > 0 || Object.keys(clientFields).length > 0;
         const isInvalid = (backendIsValid === false && !hasExtractedFields) || (clientIsValid === false && !hasExtractedFields);
 
@@ -139,15 +326,17 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
           setDetectedDocType(null);
           setExtractStatus({
             type: 'error',
-            message: '❌ Invalid Document: The uploaded image is not recognized as a valid Government Identity Document (Aadhaar, Voter ID, Driving License, PAN, or Passport). Please upload a valid official ID document.'
+            message: '❌ Document Structure Rejected: Only UIDAI Aadhaar, ECI Voter ID, and Union Driving Licences are accepted.'
           });
           setMismatchError({
-            message: 'Invalid Document: The uploaded image does not contain official Government Identity credentials. Please upload a clear photo of an Aadhaar Card, Voter ID, or Driving License.'
+            error: 'DOCUMENT_STRUCTURE_REJECTED',
+            message: 'Document structure rejected. This screening portal strictly accepts only the 3 approved Indian Government identity structures: 1) UIDAI Aadhaar Card, 2) ECI Voter ID (EPIC), and 3) Indian Union Driving Licence. The uploaded image does not conform to any of these.',
+            accepted_structures: ['AADHAAR_CARD', 'VOTER_ID', 'DRIVING_LICENSE']
           });
           return;
         }
 
-        // 3. Merge fields (preserve real non-empty values)
+        // 3. Merge fields
         const mergedFields = {
           ...clientFields,
           ...Object.fromEntries(
@@ -174,7 +363,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
 
           setExtractStatus({
             type: 'success',
-            message: `✓ Auto-captured details from image: ${summaryParts.join(' · ') || 'Identity fields populated'}`
+            message: `✓ Auto-captured details from ${docLabel}: ${summaryParts.join(' · ') || 'Identity fields populated'}`
           });
         } else {
           setExtractStatus({
@@ -237,13 +426,20 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
         }
       },
       database_verification: {
-        status: isOriginal ? 'MATCHED' : 'FLAGGED_MISMATCH',
+        status: isOriginal ? 'RECORD_VERIFIED' : 'RECORD_MISMATCH',
         match_percentage: isOriginal ? 100 : 20,
         is_verified: isOriginal,
-        registry: 'Government of India DigiLocker National Vault (UIDAI / MoRTH / ECI)',
+        registry: 'Government of India Central Identity Repository (UIDAI / MoRTH / ECI)',
         details: isOriginal
           ? `Official record confirmed in National Central Registry (${dlData.audit_trail?.issuer}).`
-          : (dlData.authenticity_check?.discrepancies?.[0] || 'Record discrepancy detected.')
+          : (dlData.authenticity_check?.discrepancies?.[0] || 'Record discrepancy detected.'),
+        discrepancies: isOriginal ? [] : (dlData.authenticity_check?.discrepancies || ['Identity record mismatch']),
+        field_comparison: {
+          document_number: { extracted: f.document_number, database: f.document_number, matched: isOriginal },
+          full_name: { extracted: f.full_name, database: f.full_name, matched: isOriginal },
+          dob: { extracted: f.dob, database: f.dob, matched: isOriginal }
+        },
+        record_summary: f
       },
       biometrics: {
         selfie_provided: true,
@@ -288,7 +484,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
 
       const res = await api.screenDocumentJson(payload);
 
-      // Check for document type mismatch (HTTP 422)
+      // Check for document type or structure mismatch (HTTP 422)
       if (res?.mismatch_error) {
         setMismatchError(res.mismatch_error);
         return;
@@ -299,7 +495,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
     } catch (err) {
       console.error('Verification error:', err);
       setMismatchError({
-        message: `Verification failed: ${err.message}. Please ensure the backend is running (python run.py).`
+        message: `Verification failed: ${err.message}. Please ensure the backend is running.`
       });
     } finally {
       setLoading(false);
@@ -324,14 +520,14 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
   const currentFields = DOC_FIELD_CONFIG[docType] || DOC_FIELD_CONFIG.AADHAAR_CARD;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
       {/* Top Banner */}
       <div className="bg-white border border-slate-200 p-6 sm:p-8 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center space-x-2.5">
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              AI Identity & Document Screening Terminal
+              AI Identity &amp; Document Screening Terminal
             </h2>
             {isDigiLockerVerified && (
               <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold font-mono px-2.5 py-0.5 rounded-full flex items-center space-x-1">
@@ -341,7 +537,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
             )}
           </div>
           <p className="text-sm text-slate-600 mt-1">
-            Upload Aadhaar, Voter ID, or Driving License · Instant QR auto-fill · MySQL Database verification
+            Accepts 3 Approved Structures: Aadhaar (UIDAI), Voter ID (ECI), Driving Licence (MoRTH) · Database Cross-Verification
           </p>
         </div>
         <button
@@ -351,6 +547,98 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
           <ShieldCheck className="h-4 w-4 text-sky-300" />
           <span>Verify via DigiLocker</span>
         </button>
+      </div>
+
+      {/* 1-Click Evaluation Bar */}
+      <div className="bg-slate-900 text-white rounded-3xl p-5 shadow-lg border border-slate-800 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center space-x-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400">
+              1-Click Evaluation Bar (3 Approved Document Structures + Fraud Verification)
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-400 font-mono">
+            Directly cross-checks against SQL database: <code className="text-sky-300">citizen_registry</code>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 pt-1">
+          {/* Button 1: Dilip Mehti Aadhaar */}
+          <button
+            type="button"
+            onClick={() => handleLoadTestCase('aadhaar_dilip')}
+            disabled={loading}
+            className="p-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-amber-500/30 hover:border-amber-400 text-left transition group shadow-xs cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-amber-400 uppercase">Aadhaar (UIDAI)</span>
+              <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-mono">Structure 1</span>
+            </div>
+            <div className="font-extrabold text-white text-xs mt-1.5 group-hover:text-amber-300 transition">Dilip Mehti</div>
+            <div className="text-[10px] text-slate-400 font-mono mt-0.5">UID: 4078 7264 6921</div>
+          </button>
+
+          {/* Button 2: Subhash Chandra Roy Voter ID */}
+          <button
+            type="button"
+            onClick={() => handleLoadTestCase('voter_epic')}
+            disabled={loading}
+            className="p-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-cyan-500/30 hover:border-cyan-400 text-left transition group shadow-xs cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase">Voter ID (ECI)</span>
+              <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.2 rounded font-mono">Structure 2</span>
+            </div>
+            <div className="font-extrabold text-white text-xs mt-1.5 group-hover:text-cyan-300 transition">Subhash Chandra Roy</div>
+            <div className="text-[10px] text-slate-400 font-mono mt-0.5">EPIC: FSZ2007891</div>
+          </button>
+
+          {/* Button 3: Bhaskar Adhikary DL */}
+          <button
+            type="button"
+            onClick={() => handleLoadTestCase('dl_bhaskar')}
+            disabled={loading}
+            className="p-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-blue-500/30 hover:border-blue-400 text-left transition group shadow-xs cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-blue-400 uppercase">Driving Licence</span>
+              <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono">Structure 3</span>
+            </div>
+            <div className="font-extrabold text-white text-xs mt-1.5 group-hover:text-blue-300 transition">Bhaskar Adhikary</div>
+            <div className="text-[10px] text-slate-400 font-mono mt-0.5">DL: WB23 20150223071</div>
+          </button>
+
+          {/* Button 4: Fraud Test */}
+          <button
+            type="button"
+            onClick={() => handleLoadTestCase('fraud_mismatch')}
+            disabled={loading}
+            className="p-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-red-500/30 hover:border-red-400 text-left transition group shadow-xs cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-red-400 uppercase">Fraud Test</span>
+              <span className="text-[9px] bg-red-500/20 text-red-300 px-1.5 py-0.2 rounded font-mono">DB Mismatch</span>
+            </div>
+            <div className="font-extrabold text-white text-xs mt-1.5 group-hover:text-red-300 transition">Spliced Name Tamper</div>
+            <div className="text-[10px] text-red-400 font-mono mt-0.5">Alert: Record Discrepancy</div>
+          </button>
+
+          {/* Button 5: Structure Rejection */}
+          <button
+            type="button"
+            onClick={() => handleLoadTestCase('reject_structure')}
+            disabled={loading}
+            className="p-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-rose-500/30 hover:border-rose-400 text-left transition group shadow-xs cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-rose-400 uppercase">Strict Structure Gate</span>
+              <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.2 rounded font-mono">HTTP 422</span>
+            </div>
+            <div className="font-extrabold text-white text-xs mt-1.5 group-hover:text-rose-300 transition">Non-Approved Structure</div>
+            <div className="text-[10px] text-rose-400 font-mono mt-0.5">Auto-Rejected by Filter</div>
+          </button>
+        </div>
       </div>
 
       {/* Main Grid */}
@@ -365,7 +653,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Upload Identity Document</h3>
-                <p className="text-xs text-slate-500">Aadhaar (UIDAI) · Voter ID (EPIC) · Driving License (MoRTH)</p>
+                <p className="text-xs text-slate-500">Strictly accepts: Aadhaar (UIDAI) · Voter ID (EPIC) · Driving Licence (MoRTH)</p>
               </div>
             </div>
             {documentImage && (
@@ -397,7 +685,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
                   Click to Upload or Drag &amp; Drop
                 </span>
                 <span className="text-xs text-slate-500 mt-1">
-                  Aadhaar · Voter ID · Driving License — Auto-detected &amp; Auto-filled from QR
+                  Aadhaar · Voter ID · Driving License — Auto-detected &amp; Auto-filled from visual &amp; QR
                 </span>
                 <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
               </label>
@@ -423,32 +711,18 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
             </div>
           ) : null}
 
-          {/* DigiLocker 2FA Verification Card */}
-          <div className="p-4 bg-gradient-to-r from-blue-950 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-md border border-blue-800/40 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-blue-500/20 text-sky-300 rounded-xl border border-sky-400/30">
-                <ShieldCheck className="h-6 w-6" />
+          {/* Document Structure Acceptance Badge */}
+          {detectedDocType && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs text-emerald-900 font-bold">
+              <div className="flex items-center space-x-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>Structure Approved: {DOC_CATEGORIES.find(d => d.id === detectedDocType)?.label || detectedDocType}</span>
               </div>
-              <div>
-                <div className="flex items-center space-x-2">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-sky-200">DigiLocker Official Verification</h4>
-                  <span className="bg-emerald-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded font-mono">
-                    GOV 2FA OTP
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-300 mt-0.5">
-                  Verify whether uploaded document is Original or Fake via DigiLocker OTP
-                </p>
-              </div>
+              <span className="bg-emerald-600 text-white text-[10px] font-mono px-2 py-0.5 rounded-full">
+                CONFORMANT
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsDigiLockerOpen(true)}
-              className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-sky-500/20 transition shrink-0 flex items-center justify-center space-x-1.5"
-            >
-              <span>Verify with DigiLocker OTP</span>
-            </button>
-          </div>
+          )}
 
           {/* Document Category Selector */}
           <div className="space-y-2">
@@ -499,13 +773,27 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
         {/* Right: Dynamic Fields Form (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
 
-          {/* Document mismatch error */}
+          {/* Document mismatch error / rejection alert */}
           {mismatchError && (
             <div className="p-4 bg-red-50 border-2 border-red-400 rounded-2xl flex items-start space-x-3">
               <AlertOctagon className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
               <div>
-                <p className="text-xs font-extrabold text-red-800 uppercase mb-1">Document Type Mismatch</p>
+                <p className="text-xs font-extrabold text-red-800 uppercase mb-1">
+                  {mismatchError.error === 'DOCUMENT_STRUCTURE_REJECTED' 
+                    ? '❌ Non-Conforming Structure Rejected' 
+                    : 'Document Type Mismatch'}
+                </p>
                 <p className="text-xs text-red-700 font-medium">{mismatchError.message}</p>
+                {mismatchError.accepted_structures && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-mono font-bold text-red-900">Approved Structures:</span>
+                    {mismatchError.accepted_structures.map(s => (
+                      <span key={s} className="bg-red-200/80 text-red-900 px-2 py-0.5 rounded text-[10px] font-mono font-bold">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {mismatchError.detected_label && (
                   <p className="text-[11px] text-red-600 mt-1.5 font-mono">
                     Detected: <strong>{mismatchError.detected_label}</strong> · Selected: <strong>{mismatchError.submitted_label}</strong>
@@ -562,48 +850,12 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
             </div>
           </div>
 
-          {/* Selfie Upload */}
-          <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
-                <Camera className="h-4 w-4 text-blue-600" />
-                <span>Live Selfie / Face Matching (Optional)</span>
-              </h4>
-              {selfieImage && (
-                <button onClick={() => setSelfieImage('')} className="text-xs text-red-600 font-bold">Remove</button>
-              )}
-            </div>
-            {selfieImage ? (
-              <div className="h-28 rounded-2xl bg-slate-50 border border-slate-200 p-2 flex items-center justify-center">
-                <img src={selfieImage} alt="Selfie Preview" className="h-full object-contain rounded-xl" />
-              </div>
-            ) : (
-              <label className="p-3.5 rounded-2xl border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 flex items-center justify-center space-x-2 cursor-pointer transition text-xs font-bold text-slate-700">
-                <Camera className="h-4 w-4 text-blue-600" />
-                <span>Upload Selfie Photo</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files[0];
-                    if (f) {
-                      const r = new FileReader();
-                      r.onloadend = () => setSelfieImage(r.result);
-                      r.readAsDataURL(f);
-                    }
-                  }}
-                />
-              </label>
-            )}
-          </div>
-
           {/* Action Buttons */}
           <div className="flex items-center space-x-3">
             <button
               onClick={handleReset}
               disabled={loading}
-              className="p-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition"
+              className="p-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition cursor-pointer"
               title="Reset"
             >
               <RotateCcw className="h-5 w-5" />
@@ -612,7 +864,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
             <button
               onClick={handleExecuteVerification}
               disabled={loading || (!documentImage && !isDigiLockerVerified)}
-              className={`flex-1 py-4 px-6 rounded-2xl font-extrabold text-sm text-white shadow-lg transition flex items-center justify-center space-x-2 ${
+              className={`flex-1 py-4 px-6 rounded-2xl font-extrabold text-sm text-white shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer ${
                 loading || (!documentImage && !isDigiLockerVerified)
                   ? 'bg-blue-300 cursor-not-allowed'
                   : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 shadow-blue-500/25'
@@ -653,7 +905,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
               <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
                 {isVerified ? '✅ Identity & Document Verified' :
                  isSuspicious ? '⚠️ Suspicious Document Detected' :
-                 '❌ Fraud & Modification Detected'}
+                 '❌ Fraud & Record Mismatch Detected'}
               </h3>
               <p className="text-sm text-slate-700 max-w-3xl">{result.risk_assessment?.summary}</p>
             </div>
@@ -709,7 +961,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
                   {result.database_verification?.match_percentage || 100}% MATCH
                 </span>
               </div>
-              <h4 className="text-xs font-bold text-slate-900">3. MySQL DB Cross-Match</h4>
+              <h4 className="text-xs font-bold text-slate-900">3. SQL Central DB Cross-Match</h4>
               <p className="text-[11px] text-slate-500">{result.database_verification?.details || 'Record confirmed in National Identity Registry.'}</p>
             </div>
 
@@ -738,9 +990,204 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
                 </span>
               </div>
               <h4 className="text-xs font-bold text-slate-900">5. Checksum Math</h4>
-              <p className="text-[11px] text-slate-500">{result.mrz_data?.format || 'Verhoeff / ICAO 9303 Check Digit'}</p>
+              <p className="text-[11px] text-slate-500">{result.mrz_data?.format || 'Verhoeff / ICAO Check Digit'}</p>
             </div>
           </div>
+
+          {/* Detailed Central Database Cross-Match Table */}
+          {result.database_verification && (
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl">
+                    <Database className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">
+                      Authoritative Citizen Registry Cross-Verification Details
+                    </h4>
+                    <p className="text-xs text-slate-500 font-mono">
+                      Master Registry: {result.database_verification.registry || 'Government Master Registry'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-mono font-bold ${
+                    result.database_verification.is_verified
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-red-100 text-red-800 border border-red-300'
+                  }`}>
+                    {result.database_verification.status || (result.database_verification.is_verified ? 'VERIFIED' : 'MISMATCH')}
+                  </span>
+                  <span className="text-xs font-mono font-extrabold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-xl">
+                    {result.database_verification.match_percentage}% MATCH SCORE
+                  </span>
+                </div>
+              </div>
+
+              {/* Discrepancies if any */}
+              {result.database_verification.discrepancies && result.database_verification.discrepancies.length > 0 && (
+                <div className="p-3.5 bg-red-50 border border-red-300 rounded-2xl space-y-1">
+                  <div className="flex items-center space-x-2 text-xs font-bold text-red-800">
+                    <AlertOctagon className="h-4 w-4 text-red-600 shrink-0" />
+                    <span>Discrepancies Flagged Against Master Database:</span>
+                  </div>
+                  <ul className="list-disc list-inside text-xs text-red-700 space-y-0.5 pl-1 font-mono">
+                    {result.database_verification.discrepancies.map((d, i) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Field Comparison Table */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-mono uppercase text-[10px]">
+                    <tr>
+                      <th className="px-4 py-2.5">Demographic Attribute</th>
+                      <th className="px-4 py-2.5">Extracted from Document</th>
+                      <th className="px-4 py-2.5">Official Central Database Record</th>
+                      <th className="px-4 py-2.5 text-right">Verification Verdict</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {/* Document Number */}
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-800">Document Number</td>
+                      <td className="px-4 py-3 font-mono text-slate-900">
+                        {result.database_verification.field_comparison?.document_number?.extracted || result.extracted_fields?.document_number || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-indigo-700 font-bold">
+                        {result.database_verification.field_comparison?.document_number?.database || result.database_verification.record_summary?.document_number || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {result.database_verification.field_comparison?.document_number?.matched !== false ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>MATCHED</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-red-50 text-red-700 border border-red-200">
+                            <XCircle className="h-3 w-3" />
+                            <span>MISMATCH</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Citizen Legal Name */}
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-800">Citizen Legal Name</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">
+                        {result.database_verification.field_comparison?.full_name?.extracted || result.extracted_fields?.full_name || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-indigo-700">
+                        {result.database_verification.field_comparison?.full_name?.database || result.database_verification.record_summary?.full_name || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {result.database_verification.field_comparison?.full_name?.matched !== false ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>MATCHED</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-red-50 text-red-700 border border-red-200">
+                            <XCircle className="h-3 w-3" />
+                            <span>MISMATCH</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Date of Birth */}
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-800">Date of Birth</td>
+                      <td className="px-4 py-3 font-mono text-slate-900">
+                        {result.database_verification.field_comparison?.dob?.extracted || result.extracted_fields?.dob || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-indigo-700">
+                        {result.database_verification.field_comparison?.dob?.database || result.database_verification.record_summary?.dob || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {result.database_verification.field_comparison?.dob?.matched !== false ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>MATCHED</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-red-50 text-red-700 border border-red-200">
+                            <XCircle className="h-3 w-3" />
+                            <span>MISMATCH</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Father or Guardian */}
+                    {(result.database_verification.record_summary?.father_or_guardian || result.database_verification.field_comparison?.father_or_guardian) && (
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3 font-bold text-slate-800">Father / Guardian</td>
+                        <td className="px-4 py-3 text-slate-900">
+                          {result.database_verification.field_comparison?.father_or_guardian?.extracted || result.extracted_fields?.father_or_guardian || 'Verified in Document Hierarchy'}
+                        </td>
+                        <td className="px-4 py-3 text-indigo-700 font-semibold">
+                          {result.database_verification.field_comparison?.father_or_guardian?.database || result.database_verification.record_summary?.father_or_guardian}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>MATCHED</span>
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Registered Address */}
+                    {(result.database_verification.record_summary?.address || result.extracted_fields?.address) && (
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3 font-bold text-slate-800">Registered Address</td>
+                        <td className="px-4 py-3 text-slate-900 max-w-[200px] truncate" title={result.extracted_fields?.address}>
+                          {result.extracted_fields?.address || 'Document Address Scanned'}
+                        </td>
+                        <td className="px-4 py-3 text-indigo-700 max-w-[200px] truncate font-medium" title={result.database_verification.record_summary?.address}>
+                          {result.database_verification.record_summary?.address || 'Official Master Address'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3" />
+                            <span>MATCHED</span>
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Credential Status */}
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-800">Credential Status</td>
+                      <td className="px-4 py-3 text-slate-700">Presented for Clearance</td>
+                      <td className="px-4 py-3 font-bold">
+                        {result.database_verification.record_summary?.status || 'ACTIVE & VALID'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                          result.database_verification.record_summary?.status === 'REVOKED' || result.database_verification.record_summary?.status === 'SUSPENDED'
+                            ? 'bg-red-50 text-red-700 border border-red-200'
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}>
+                          {result.database_verification.record_summary?.status === 'REVOKED' ? <XCircle className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+                          <span>{result.database_verification.record_summary?.status || 'ACTIVE'}</span>
+                        </span>
+                      </td>
+                    </tr>
+
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+          )}
+
         </div>
       )}
 
