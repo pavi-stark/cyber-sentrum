@@ -98,14 +98,15 @@ class ForensicsEngine:
             
         tamper_score = round(float(tamper_score), 1)
         
-        # Check document template validity
+        # Check document template validity (Flag explicit non-identity / certificate documents)
         from app.services.ocr_mrz_service import OCRMRZService
         is_valid_structure, template_code, template_info = OCRMRZService.validate_document_structure(orig_bgr)
+        rejection_reason = str(template_info.get("details", template_info.get("reason", "")))
         
-        if not is_valid_structure:
+        if not is_valid_structure and "DOCUMENT_REJECTED" in rejection_reason:
             tamper_score = 99.0
             status = "INVALID_DOCUMENT_STRUCTURE"
-            desc = f"REJECTED: Not a recognized government identity credential ({template_info.get('reason', 'Image lacks official document structure')})."
+            desc = f"REJECTED: Not a recognized government identity credential ({rejection_reason})."
         elif tamper_score < 25.0:
             status = "CLEAN"
             desc = "Uniform compression levels detected. No digital manipulation or photo splicing detected."

@@ -17,6 +17,27 @@ DOC_TYPES = {
     "VISA":            "Visa Sticker (Immigration)",
 }
 
+def _configure_pytesseract() -> bool:
+    """Detect and configure Tesseract executable on Windows or Linux."""
+    try:
+        import pytesseract
+        import shutil
+        if shutil.which("tesseract"):
+            return True
+        for p in [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
+            "/usr/bin/tesseract",
+            "/usr/local/bin/tesseract",
+        ]:
+            if os.path.exists(p):
+                pytesseract.pytesseract.tesseract_cmd = p
+                return True
+        return False
+    except Exception:
+        return False
+
 class ICAO9303Validator:
     """
     Implements ICAO Doc 9303 specification for Machine Readable Travel Documents (MRTD).
@@ -156,58 +177,123 @@ class OCRMRZService:
     # 1.  Detect and Validate Approved Document Structures
     # ─────────────────────────────────────────────────────────────
     @staticmethod
+    def _detect_certificate_or_non_id(ocr_text: str) -> Tuple[bool, str]:
+        """
+        Detects if the text matches an academic degree, course certificate, award,
+        participation certificate, invoice, or non-identity document.
+        """
+        if not ocr_text:
+            return False, ""
+
+        upper = ocr_text.upper()
+
+        # Keywords strongly indicating an academic or award certificate
+        cert_terms = [
+            "CERTIFICATE OF", "CERTIFICATE", "CERTIFY THAT", "THIS IS TO CERTIFY",
+            "PROUDLY PRESENTED TO", "AWARDED TO", "PRESENTED TO", "SUCCESSFULLY COMPLETED",
+            "COMPLETION OF", "FOR PARTICIPATION", "PARTICIPATED IN", "IN APPRECIATION OF",
+            "CERTIFICATE OF MERIT", "CERTIFICATE OF APPRECIATION", "CERTIFICATE OF ACHIEVEMENT",
+            "DIPLOMA IN", "BACHELOR OF", "MASTER OF", "DEGREE OF", "ACADEMIC YEAR",
+            "SEMINAR ON", "WORKSHOP ON", "TRAINING PROGRAMME", "FACULTY OF",
+            "COURSE COMPLETION", "STUDENT ID", "GRADE SHEET", "TRANSCRIPT OF",
+            "MARKSHEET", "HEAD OF DEPARTMENT", "PRINCIPAL SIGNATURE",
+            "TAX INVOICE", "COMMERCIAL INVOICE", "BILL OF SUPPLY", "ESTIMATE / QUOTATION"
+        ]
+
+        found_terms = [t for t in cert_terms if t in upper]
+
+        # Government ID Authority keywords that legitimately appear on genuine government credentials
+        govt_id_authorities = [
+            "UNIQUE IDENTIFICATION AUTHORITY", "UIDAI",
+            "ELECTION COMMISSION OF INDIA", "ELECTOR PHOTO IDENTITY",
+            "MINISTRY OF ROAD TRANSPORT", "UNION DRIVING LICENCE",
+            "STATE TRANSPORT DEPARTMENT", "MOTOR VEHICLES ACT",
+            "INCOME TAX DEPARTMENT", "PERMANENT ACCOUNT NUMBER",
+            "REPUBLIC OF INDIA PASSPORT"
+        ]
+        has_govt_id_authority = any(ga in upper for ga in govt_id_authorities)
+
+        if found_terms and not has_govt_id_authority:
+            terms_str = ", ".join(found_terms[:3])
+            return True, f"DOCUMENT_REJECTED: File contains certificate or non-identity markers ({terms_str}). Government identity screening strictly requires an Aadhaar Card, Voter ID, or Driving License."
+
+        return False, ""
+
+    @staticmethod
     def _detect_structure_features(img_bgr: np.ndarray) -> Tuple[Optional[str], float, str]:
         """
-        Validates if the image matches one of the 3 approved government document structures:
+        Strictly validates if the image matches one of the 3 approved government document structures:
         1. AADHAAR_CARD (UIDAI e-Aadhaar A4 portrait or PVC card)
         2. VOTER_ID (ECI EPIC portrait card with top barcode and photo frame)
-        3. DRIVING_LICENSE (Indian Union Driving Licence landscape smart card with EMV chip)
+        3. DRIVING_LICENSE (Indian Union Driving Licence smart card)
+
+        NEVER classifies arbitrary certificates or unrelated images based purely on aspect ratio or color!
         """
         if img_bgr is None or img_bgr.size == 0:
             return None, 0.0, "Invalid image data"
 
         h, w = img_bgr.shape[:2]
         aspect = float(w) / float(h)
-        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
 
-        # Saffron mask for Aadhaar
-        saffron_mask = cv2.inRange(hsv, (8, 90, 130), (25, 255, 255))
-        saffron_ratio = np.sum(saffron_mask > 0) / float(h * w)
-
-        # Cyan mask for Driving License header / ECI background
-        cyan_mask = cv2.inRange(hsv, (85, 35, 130), (125, 230, 255))
-        cyan_ratio = np.sum(cyan_mask > 0) / float(h * w)
-
-        # Smart Chip gold/bronze contacts in left quadrant (DL smart card)
-        chip_area = img_bgr[int(h*0.25):int(h*0.80), :int(w*0.38)]
-        chip_hsv = cv2.cvtColor(chip_area, cv2.COLOR_BGR2HSV)
-        chip_gold_mask = cv2.inRange(chip_hsv, (12, 65, 100), (32, 255, 255))
-        chip_gold_ratio = np.sum(chip_gold_mask > 0) / float(chip_area.shape[0] * chip_area.shape[1])
-
-        # Top 1D barcode edge density (Voter ID top 25%)
-        top_bar = img_bgr[:int(h*0.25), :]
-        edges_top = cv2.Canny(top_bar, 50, 150)
-        top_barcode_density = np.sum(edges_top > 0) / float(top_bar.shape[0] * top_bar.shape[1])
-
-        # OCR text pattern matching
+        # Step A: Perform optical text recognition
         ocr_text = OCRMRZService._ocr_image_text(img_bgr).upper()
 
-        # 1. Indian Union Driving Licence Structure Check
-        has_dl_text = any(kw in ocr_text for kw in ["DRIVING LICEN", "UNION DRIVING", "GOVERNMENT OF WEST BENGAL", "WB23", "VALIDITY", "MOTOR VEHICLE"])
-        if has_dl_text or (1.35 <= aspect <= 2.25 and (cyan_ratio > 0.03 or chip_gold_ratio > 0.003)):
+        # Step B: Check if document is an academic certificate, diploma, or non-identity document
+        is_cert, cert_reason = OCRMRZService._detect_certificate_or_non_id(ocr_text)
+        if is_cert:
+            return None, 0.0, cert_reason
+
+        # Step C: Check 1 - Indian Union Driving Licence (Requires real DL text markers or standard DL format)
+        dl_kw = [
+            "DRIVING LICEN", "UNION DRIVING", "MOTOR VEHICLE", "AUTHORISATION TO DRIVE",
+            "FORM 7", "TRANSPORT DEPARTMENT", "LICENSING AUTHORITY", "SARATHI",
+            "PARIVAHAN", "DL NO", "D.L. NO"
+        ]
+        has_dl_kw = any(kw in ocr_text for kw in dl_kw)
+        has_dl_regex = bool(
+            re.search(r'\b[A-Z]{2}[-\s]?[0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{7}\b', ocr_text) or
+            re.search(r'\b[A-Z]{2}[0-9]{2}\s?[0-9]{11}\b', ocr_text)
+        )
+
+        if has_dl_kw or has_dl_regex:
             return "DRIVING_LICENSE", 0.98, "Approved Structure: Indian Union Driving Licence (MoRTH Smart Card Template)"
 
-        # 2. Voter ID (EPIC) Structure Check
-        has_voter_text = any(kw in ocr_text for kw in ["ELECTION COMMISSION", "ELECTOR PHOTO", "EPIC", "NIRVACHAN", "FSZ200", "VOTER"])
-        if has_voter_text or (0.48 <= aspect <= 0.78 and (top_barcode_density > 0.12 or cyan_ratio > 0.18)):
+        # Step D: Check 2 - Voter ID / EPIC (Requires ECI / EPIC text markers or valid EPIC number)
+        voter_kw = [
+            "ELECTION COMMISSION OF INDIA", "ELECTOR PHOTO", "EPIC NO", "EPIC",
+            "BHARAT NIRVACHAN", "NIRVACHAN SADAN"
+        ]
+        has_voter_kw = any(kw in ocr_text for kw in voter_kw)
+        has_epic_regex = bool(re.search(r'\b[A-Z]{3}[0-9]{7}\b', ocr_text))
+
+        if has_voter_kw or has_epic_regex:
             return "VOTER_ID", 0.98, "Approved Structure: ECI Elector Photo Identity Card (EPIC Template)"
 
-        # 3. Aadhaar Card Structure Check
-        has_aadhaar_text = any(kw in ocr_text for kw in ["AADHAAR", "UIDAI", "UNIQUE IDENTIFICATION", "MERA AADHAAR", "MERI PEHCHAN", "BHARAT SARKAR", "ENROLMENT", "4078", "DILIP"])
-        if has_aadhaar_text or ((0.62 <= aspect <= 0.92 and saffron_ratio > 0.003) or (1.35 <= aspect <= 1.80 and saffron_ratio > 0.010)):
+        # Step E: Check 3 - UIDAI Aadhaar Card (Requires UIDAI / Aadhaar text markers or 12-digit UID)
+        aadhaar_kw = [
+            "AADHAAR", "UIDAI", "UNIQUE IDENTIFICATION", "MERA AADHAAR",
+            "MERI PEHCHAN", "BHARAT SARKAR", "ENROLMENT NO", "ENROLLMENT NO", "GOVERNMENT OF INDIA"
+        ]
+        has_aadhaar_kw = any(kw in ocr_text for kw in aadhaar_kw)
+        has_uid_regex = bool(
+            re.search(r'\b\d{4}\s\d{4}\s\d{4}\b', ocr_text) or
+            re.search(r'\b[Xx\d]{4}\s[Xx\d]{4}\s\d{4}\b', ocr_text)
+        )
+
+        if has_aadhaar_kw or has_uid_regex:
             return "AADHAAR_CARD", 0.98, "Approved Structure: UIDAI Aadhaar Card (e-Aadhaar / Official Template)"
 
-        return None, 0.0, "DOCUMENT_STRUCTURE_REJECTED: Document does not match approved Aadhaar, Voter ID, or Driving License structures."
+        # Step F: Check 4 - Passport / Visa / PAN Credentials
+        if "PASSPORT" in ocr_text or "PASSEPORT" in ocr_text or "P<" in ocr_text:
+            return "PASSPORT", 0.98, "Approved Structure: ICAO Doc 9303 Machine Readable Travel Document (Passport)"
+
+        if ("VISA" in ocr_text and "STICKER" in ocr_text) or "V<" in ocr_text:
+            return "VISA", 0.95, "Approved Structure: International Visa Sticker"
+
+        if "INCOME TAX DEPARTMENT" in ocr_text or "PERMANENT ACCOUNT NUMBER" in ocr_text or bool(re.search(r'\b[A-Z]{5}[0-9]{4}[A-Z]\b', ocr_text)):
+            return "PAN_CARD", 0.95, "Approved Structure: Income Tax PAN Card"
+
+        return None, 0.0, "DOCUMENT_STRUCTURE_REJECTED: Uploaded file does not conform to approved UIDAI Aadhaar Card, ECI Voter ID, or MoRTH Driving Licence structures."
 
     @staticmethod
     def detect_document_type(image_bytes: bytes) -> Dict[str, Any]:
@@ -223,20 +309,29 @@ class OCRMRZService:
             qr_data = OCRMRZService._scan_qr_robust(img)
             if qr_data and len(qr_data.strip()) > 5:
                 qr = qr_data.strip()
-                if (re.search(r'uid=', qr, re.IGNORECASE)
-                        or "PrintLetterBarcodeData" in qr
-                        or re.search(r'\b\d{12}\b', qr)
-                        or "yob=" in qr or "dob=" in qr):
+
+                # UIDAI Aadhaar QR check: Must be XML PrintLetterBarcodeData, or uid= attribute, or large compressed integer
+                is_uidai_qr = (
+                    "PrintLetterBarcodeData" in qr or
+                    bool(re.search(r'\buid=["\']?\d{12}["\']?', qr, re.IGNORECASE)) or
+                    (qr.isdigit() and len(qr) > 80)
+                )
+                if is_uidai_qr:
                     return {"detected_type": "AADHAAR_CARD", "confidence": "HIGH",
-                            "reason": "QR code contains UIDAI Aadhaar data", "detected": True,
+                            "reason": "QR code contains verified UIDAI Aadhaar data", "detected": True,
                             "qr_data": qr}
-                if re.search(r'\b[A-Z]{3}[0-9]{7}\b', qr) or re.search(r'EPIC', qr, re.IGNORECASE):
+
+                # Voter ID QR / Barcode check: Must contain EPIC or 3-letter + 7-digit EPIC ID
+                if "EPIC" in qr.upper() or bool(re.search(r'\b[A-Z]{3}[0-9]{7}\b', qr)):
                     return {"detected_type": "VOTER_ID", "confidence": "HIGH",
-                            "reason": "QR code contains EPIC Voter ID data", "detected": True,
+                            "reason": "QR code contains verified EPIC Voter ID data", "detected": True,
                             "qr_data": qr}
-                if re.search(r'\b[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}\b', qr):
+
+                # Driving License QR check: Must have MoRTH / DL keywords or standard DL format
+                if ("DRIVING" in qr.upper() or "SARATHI" in qr.upper() or "MORTH" in qr.upper() or
+                        bool(re.search(r'\b[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}\b', qr))):
                     return {"detected_type": "DRIVING_LICENSE", "confidence": "HIGH",
-                            "reason": "QR code contains Driving License number", "detected": True,
+                            "reason": "QR code contains verified Driving License data", "detected": True,
                             "qr_data": qr}
 
             # Structure detection
@@ -252,7 +347,7 @@ class OCRMRZService:
             return {
                 "detected_type": None,
                 "confidence": "NONE",
-                "reason": "UNSUPPORTED_STRUCTURE: Uploaded document does not match approved Aadhaar, Voter ID, or Driving License structures.",
+                "reason": reason or "UNSUPPORTED_STRUCTURE: Uploaded document does not match approved Aadhaar, Voter ID, or Driving License structures.",
                 "detected": False
             }
 
@@ -274,7 +369,7 @@ class OCRMRZService:
         """
         try:
             doc_type, conf, reason = OCRMRZService._detect_structure_features(img_bgr)
-            if doc_type in ("AADHAAR_CARD", "VOTER_ID", "DRIVING_LICENSE"):
+            if doc_type in ("AADHAAR_CARD", "VOTER_ID", "DRIVING_LICENSE", "PASSPORT", "VISA", "PAN_CARD"):
                 return True, "VALID_APPROVED_STRUCTURE", {
                     "matched_structure": doc_type,
                     "confidence": conf,
@@ -373,18 +468,56 @@ class OCRMRZService:
 
     @staticmethod
     def _ocr_image_text(img_bgr: Optional[np.ndarray]) -> str:
-        """Run OCR on image using pytesseract if available with OpenCV preprocessing."""
+        """Run OCR on image using pytesseract if available with multi-pass OpenCV preprocessing."""
         if img_bgr is None or img_bgr.size == 0:
             return ""
         try:
             import pytesseract
-            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-            filtered = cv2.bilateralFilter(gray, 9, 75, 75)
-            norm = cv2.normalize(filtered, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-            text = pytesseract.image_to_string(norm, config='--psm 6')
-            if len(text.strip()) < 10:
-                text = pytesseract.image_to_string(gray)
-            return text or ""
+            _configure_pytesseract()
+
+            h, w = img_bgr.shape[:2]
+            # Upscale if low resolution (target min width 1200px)
+            if w < 1200 and h < 1200:
+                scale = min(3.0, 1600.0 / max(w, h))
+                if scale > 1.2:
+                    proc_img = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+                else:
+                    proc_img = img_bgr
+            else:
+                proc_img = img_bgr
+
+            gray = cv2.cvtColor(proc_img, cv2.COLOR_BGR2GRAY)
+
+            # Pass 1: CLAHE (Contrast Limited Adaptive Histogram Equalization)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(gray)
+            
+            # Pass 2: Bilateral filter to reduce noise while keeping edges sharp
+            denoised = cv2.bilateralFilter(enhanced, 7, 50, 50)
+            
+            # Extract text using PSM 11 (sparse text, typical for ID cards) and PSM 6 (uniform block)
+            try:
+                text1 = pytesseract.image_to_string(denoised, config='--oem 3 --psm 11')
+            except Exception:
+                text1 = ""
+
+            try:
+                text2 = pytesseract.image_to_string(denoised, config='--oem 3 --psm 6')
+            except Exception:
+                text2 = ""
+
+            combined = text1 if len(text1.strip()) >= len(text2.strip()) else text2
+            if len(combined.strip()) < 10:
+                # Try Otsu threshold
+                _, thresh = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+                try:
+                    text3 = pytesseract.image_to_string(thresh, config='--psm 11')
+                    if len(text3.strip()) > len(combined.strip()):
+                        combined = text3
+                except Exception:
+                    pass
+
+            return combined or ""
         except Exception:
             return ""
 
@@ -474,35 +607,47 @@ class OCRMRZService:
             ocr_text = OCRMRZService._ocr_image_text(img)
             if ocr_text:
                 if not fields["document_number"]:
-                    m = re.search(r'\b(\d{4}\s\d{4}\s\d{4})\b', ocr_text) or re.search(r'\b(\d{12})\b', ocr_text)
+                    m = re.search(r'\b(\d{4}\s\d{4}\s\d{4})\b', ocr_text) or \
+                        re.search(r'\b([Xx\d]{4}\s[Xx\d]{4}\s\d{4})\b', ocr_text) or \
+                        re.search(r'\b(\d{12})\b', ocr_text)
                     if m:
                         raw_uid = re.sub(r'\s', '', m.group(1))
-                        fields["document_number"] = f"{raw_uid[:4]} {raw_uid[4:8]} {raw_uid[8:]}"
+                        if len(raw_uid) == 12:
+                            fields["document_number"] = f"{raw_uid[:4]} {raw_uid[4:8]} {raw_uid[8:]}"
+                        else:
+                            fields["document_number"] = m.group(1).upper()
+
                 if not fields["dob"]:
-                    m = re.search(r'(?:DOB|Birth|YOB|Year)[:\s]*(\d{2}[/-]\d{2}[/-]\d{4}|\d{4})', ocr_text, re.I) or re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
+                    m = re.search(r'(?:DOB|Date of Birth|Birth|YOB|Year)[:\s]*(\d{2}[/-]\d{2}[/-]\d{4}|\d{4})', ocr_text, re.I) or \
+                        re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
                     if m: fields["dob"] = m.group(1).replace("-", "/")
+
                 if not fields["gender"]:
                     if re.search(r'\b(FEMALE|WOMAN)\b', ocr_text, re.I): fields["gender"] = "FEMALE"
                     elif re.search(r'\b(MALE|MAN)\b', ocr_text, re.I): fields["gender"] = "MALE"
+                    elif re.search(r'\b(TRANSGENDER)\b', ocr_text, re.I): fields["gender"] = "TRANSGENDER"
+
                 if not fields["full_name"]:
                     lines = [l.strip() for l in ocr_text.split('\n') if l.strip()]
-                    for l in lines:
-                        if re.match(r'^[A-Z][a-zA-Z\s\.]{3,35}$', l) and not re.search(r'GOVERNMENT|INDIA|UIDAI|AADHAAR|DOB|MALE|FEMALE', l, re.I):
-                            fields["full_name"] = l.upper()
-                            break
+                    for i, l in enumerate(lines):
+                        upper_l = l.upper()
+                        # If line says "To:" or "Recipient:"
+                        if re.match(r'^(TO|RECIPIENT)[:\s]*$', upper_l) and i + 1 < len(lines):
+                            cand = lines[i+1].strip()
+                            if re.match(r'^[A-Za-z\s\.]{3,35}$', cand):
+                                fields["full_name"] = cand.upper()
+                                break
+                        # Match name-like line
+                        if re.match(r'^[A-Z][a-zA-Z\s\.]{3,35}$', l):
+                            if not re.search(r'GOVERNMENT|INDIA|UIDAI|AADHAAR|DOB|MALE|FEMALE|ENROLMENT|AUTHORITY|UNIQUE|HELP|ENROLLMENT|MERI|MERA|PEHCHAN|SARKAR', upper_l):
+                                fields["full_name"] = l.upper()
+                                break
 
-            # If matching the official e-Aadhaar sheet format (Dilip Mehti / 4078 7264 6921)
-            h, w = img.shape[:2]
-            aspect = float(w) / float(h)
-            if 0.65 <= aspect <= 0.88 and not fields.get("document_number"):
-                fields["document_number"] = "4078 7264 6921"
-                fields["full_name"] = "DILIP MEHTI"
-                fields["dob"] = "02/01/2003"
-                fields["gender"] = "MALE"
-                fields["father_or_guardian"] = "INDRA MAHTO"
-                fields["address"] = "S/O Indra Mahto, VTC: Chanho, PO: Chanho, Sub District: Chanho, District: Lohardaga, State: Jharkhand, PIN Code: 835214"
-                fields["enrollment_no"] = "0818/63130/04041"
-                fields["issuing_authority"] = "Unique Identification Authority of India (UIDAI)"
+                # Address extraction if present
+                if not fields.get("address"):
+                    m_addr = re.search(r'(?:Address|S/O|D/O|W/O|C/O)[:\s\-]+([^\n\r]+(?:[\n\r]+[^\n\r]+){1,3})', ocr_text, re.I)
+                    if m_addr:
+                        fields["address"] = re.sub(r'[\r\n]+', ', ', m_addr.group(1).strip())
 
         return fields
 
@@ -593,24 +738,29 @@ class OCRMRZService:
             ocr_text = OCRMRZService._ocr_image_text(img)
             if ocr_text:
                 if not fields["document_number"]:
-                    m = re.search(r'\b([A-Z]{3}[0-9]{7})\b', ocr_text)
+                    m = re.search(r'\b([A-Z]{3}[0-9]{7})\b', ocr_text) or \
+                        re.search(r'(?:EPIC\s*NO|CARD\s*NO)[:\s\-]*([A-Z0-9]{10})', ocr_text, re.I)
                     if m: fields["document_number"] = m.group(1).upper()
                 if not fields["dob"]:
-                    m = re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
+                    m = re.search(r'(?:DOB|Date of Birth|Birth)[:\s]*(\d{2}[/-]\d{2}[/-]\d{4})', ocr_text, re.I) or \
+                        re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
                     if m: fields["dob"] = m.group(1).replace("-", "/")
-
-            # If matching the official ECI Voter ID format (Subhash Chandra Roy / FSZ2007891)
-            h, w = img.shape[:2]
-            aspect = float(w) / float(h)
-            if 0.48 <= aspect <= 0.78 and not fields.get("document_number"):
-                fields["document_number"] = "FSZ2007891"
-                fields["full_name"] = "SUBHASH CHANDRA ROY"
-                fields["dob"] = "12/05/1982"
-                fields["gender"] = "MALE"
-                fields["father_or_guardian"] = "DHIRENDRA NATH ROY"
-                fields["address"] = "Village/Ward 14, P.S. Barrackpore, Dist. North 24 Parganas, West Bengal - 700120"
-                fields["state"] = "WEST BENGAL"
-                fields["issuing_authority"] = "Election Commission of India (ECI)"
+                if not fields["full_name"]:
+                    m = re.search(r'(?:Elector\'?s?\s*Name|Name)[:\s\-]+([A-Za-z\s\.]+)', ocr_text, re.I)
+                    if m:
+                        candidate = m.group(1).strip().upper()
+                        if candidate and not any(kw in candidate for kw in ["ELECTION", "COMMISSION", "FATHER", "HUSBAND", "INDIA", "EPIC"]):
+                            fields["full_name"] = candidate
+                    if not fields["full_name"]:
+                        lines = [l.strip() for l in ocr_text.split('\n') if l.strip()]
+                        for l in lines:
+                            if re.match(r'^[A-Z][a-zA-Z\s\.]{3,35}$', l) and not re.search(r'ELECTION|COMMISSION|INDIA|ELECTOR|PHOTO|IDENTITY|CARD|EPIC|FATHER|NAME|SEX|DOB', l, re.I):
+                                fields["full_name"] = l.upper()
+                                break
+                if not fields.get("father_or_guardian"):
+                    m_f = re.search(r'(?:Father\'?s?\s*Name|Husband\'?s?\s*Name)[:\s\-]+([A-Za-z\s\.]+)', ocr_text, re.I)
+                    if m_f:
+                        fields["father_or_guardian"] = m_f.group(1).strip().upper()
 
         return fields
 
@@ -638,28 +788,48 @@ class OCRMRZService:
             ocr_text = OCRMRZService._ocr_image_text(img)
             if ocr_text:
                 if not fields["document_number"]:
-                    m = re.search(r'\b([A-Z]{2}[-\s]?[0-9]{2}[-\s]?[0-9]{4,11})\b', ocr_text)
-                    if m: fields["document_number"] = re.sub(r'[-\s]', '', m.group(1)).upper()
+                    m = re.search(r'(?:DL\s*NO|LICEN[SC]E\s*NO|NO\.?)[:\s\-]*([A-Z0-9\/\-\s]{10,20})', ocr_text, re.I)
+                    if m:
+                        clean_dl = re.sub(r'[\s\-]', '', m.group(1)).upper()
+                        if len(clean_dl) >= 10:
+                            fields["document_number"] = clean_dl
+                    if not fields["document_number"]:
+                        m2 = re.search(r'\b([A-Z]{2}[-\s]?[0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{7})\b', ocr_text) or \
+                             re.search(r'\b([A-Z]{2}[0-9]{2}\s?[0-9]{11})\b', ocr_text) or \
+                             re.search(r'\b([A-Z]{2}[-\s]?[0-9]{2}[-\s]?[0-9]{4,11})\b', ocr_text)
+                        if m2:
+                            fields["document_number"] = re.sub(r'[-\s]', '', m2.group(1)).upper()
+
                 if not fields["dob"]:
-                    m = re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
+                    m = re.search(r'(?:DOB|Date of Birth|Birth)[:\s]*(\d{2}[/-]\d{2}[/-]\d{4})', ocr_text, re.I) or \
+                        re.search(r'\b(\d{2}[/-]\d{2}[/-]\d{4})\b', ocr_text)
                     if m: fields["dob"] = m.group(1).replace("-", "/")
 
-            # If matching the official Indian Union Driving Licence format (Bhaskar Adhikary / WB23 20150223071)
-            h, w = img.shape[:2]
-            aspect = float(w) / float(h)
-            if 1.40 <= aspect <= 2.25 and not fields.get("document_number"):
-                fields["document_number"] = "WB23 20150223071"
-                fields["full_name"] = "BHASKAR ADHIKARY"
-                fields["dob"] = "14-03-1974"
-                fields["gender"] = "MALE"
-                fields["father_or_guardian"] = "NARAYAN ADHIKARY"
-                fields["issue_date"] = "08-04-2015"
-                fields["expiry_date"] = "13-03-2034"
-                fields["blood_group"] = "U"
-                fields["organ_donor"] = "N"
-                fields["address"] = "6 SCHOOL LANE NALTA DUM DUM CANTT N24PGS PO PS DUM DUM KOLKATA WEST BENGAL BARRACKPUR - I,24 PARGANAS NORTH 700028"
-                fields["state"] = "WEST BENGAL"
-                fields["issuing_authority"] = "Government of West Bengal / MoRTH SARATHI"
+                if not fields["expiry_date"]:
+                    m = re.search(r'(?:Valid(?:ity)?|Expiry|Exp)[:\s\w]*(\d{2}[/-]\d{2}[/-]\d{4})', ocr_text, re.I)
+                    if m: fields["expiry_date"] = m.group(1).replace("-", "/")
+
+                if not fields["vehicle_class"]:
+                    m = re.search(r'\b(LMV(?:-GV)?|MCWG|MCWOG|TRANS|HMV|3W-NT)\b', ocr_text)
+                    if m: fields["vehicle_class"] = m.group(1).upper()
+
+                if not fields["full_name"]:
+                    m = re.search(r'(?:Name|Holder\'?s?\s*Name)[:\s\-]+([A-Za-z\s\.]+)', ocr_text, re.I)
+                    if m:
+                        candidate = m.group(1).strip().upper()
+                        if candidate and not any(kw in candidate for kw in ["DRIVING", "UNION", "FATHER", "SON", "DAUGHTER", "AUTHORITY", "VALIDITY"]):
+                            fields["full_name"] = candidate
+                    if not fields["full_name"]:
+                        lines = [l.strip() for l in ocr_text.split('\n') if l.strip()]
+                        for l in lines:
+                            if re.match(r'^[A-Z][a-zA-Z\s\.]{3,35}$', l) and not re.search(r'DRIVING|LICEN|UNION|INDIA|TRANSPORT|GOVERNMENT|VALID|MOTOR|DATE|NAME|FORM', l, re.I):
+                                fields["full_name"] = l.upper()
+                                break
+
+                if not fields.get("father_or_guardian"):
+                    m_f = re.search(r'(?:Father\'?s?\s*Name|S/O|D/O|W/O)[:\s\-]+([A-Za-z\s\.]+)', ocr_text, re.I)
+                    if m_f:
+                        fields["father_or_guardian"] = m_f.group(1).strip().upper()
 
         return fields
 

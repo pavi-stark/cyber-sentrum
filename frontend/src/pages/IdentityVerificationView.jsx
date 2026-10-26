@@ -287,10 +287,12 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
         let backendFields = {};
         let backendType = null;
         let backendIsValid = null;
+        let backendError = null;
         try {
           const extractRes = await api.extractDocumentFields(base64Data);
           if (extractRes) {
             backendIsValid = extractRes.is_valid_document;
+            backendError = extractRes.error;
             if (extractRes.is_valid_document !== false && extractRes.extracted_fields) {
               backendFields = extractRes.extracted_fields;
               backendType = extractRes.detected_document_type;
@@ -304,10 +306,12 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
         let clientFields = {};
         let clientType = null;
         let clientIsValid = null;
+        let clientError = null;
         try {
           const clientRes = await ocrService.extractFromImage(base64Data, backendType || docType);
           if (clientRes) {
             clientIsValid = clientRes.is_valid_document;
+            clientError = clientRes.error;
             if (clientRes.success && clientRes.fields) {
               clientFields = clientRes.fields;
               clientType = clientRes.detectedType;
@@ -317,20 +321,35 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
           console.warn('Client OCR error:', e);
         }
 
-        // Check if recognized
-        const hasExtractedFields = Object.keys(backendFields).length > 0 || Object.keys(clientFields).length > 0;
-        const isInvalid = (backendIsValid === false && !hasExtractedFields) || (clientIsValid === false && !hasExtractedFields);
-
-        if (!hasExtractedFields && isInvalid) {
+        // Check if explicitly rejected as certificate or non-identity document
+        if (backendIsValid === false || clientIsValid === false) {
+          const rejectionMsg = backendError || clientError || 'Document structure rejected. This screening portal strictly accepts only the 3 approved Indian Government identity structures: 1) UIDAI Aadhaar Card, 2) ECI Voter ID (EPIC), and 3) Indian Union Driving Licence. The uploaded image does not conform to any of these.';
           setFields({});
           setDetectedDocType(null);
           setExtractStatus({
             type: 'error',
-            message: '❌ Document Structure Rejected: Only UIDAI Aadhaar, ECI Voter ID, and Union Driving Licences are accepted.'
+            message: `❌ Document Rejected: ${rejectionMsg}`
           });
           setMismatchError({
             error: 'DOCUMENT_STRUCTURE_REJECTED',
-            message: 'Document structure rejected. This screening portal strictly accepts only the 3 approved Indian Government identity structures: 1) UIDAI Aadhaar Card, 2) ECI Voter ID (EPIC), and 3) Indian Union Driving Licence. The uploaded image does not conform to any of these.',
+            message: rejectionMsg,
+            accepted_structures: ['AADHAAR_CARD', 'VOTER_ID', 'DRIVING_LICENSE']
+          });
+          return;
+        }
+
+        // Check if any recognized identity fields were found
+        const hasExtractedFields = Object.keys(backendFields).length > 0 || Object.keys(clientFields).length > 0;
+        if (!hasExtractedFields && !backendType && !clientType) {
+          setFields({});
+          setDetectedDocType(null);
+          setExtractStatus({
+            type: 'error',
+            message: '❌ Document Structure Rejected: Could not find valid Aadhaar, Voter ID, or Driving License markers.'
+          });
+          setMismatchError({
+            error: 'DOCUMENT_STRUCTURE_REJECTED',
+            message: 'Document structure rejected. The uploaded file does not contain valid UIDAI Aadhaar, ECI Voter ID, or MoRTH Driving Licence data.',
             accepted_structures: ['AADHAAR_CARD', 'VOTER_ID', 'DRIVING_LICENSE']
           });
           return;

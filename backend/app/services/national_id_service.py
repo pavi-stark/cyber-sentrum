@@ -180,11 +180,20 @@ class NationalIDValidator:
         - 7 digits (Serial number)
         Example: TN0120200012345 (Total 15 chars or 16 chars with space)
         """
-        dl_raw = re.sub(r'[\s\-]', '', str(data.get("document_number", "")).strip().upper())
+        INDIAN_STATES = {
+            "AN", "AP", "AR", "AS", "BR", "CG", "CH", "DD", "DL", "DN", "GA",
+            "GJ", "HP", "HR", "JH", "JK", "KA", "KL", "LA", "LD", "MH", "ML",
+            "MN", "MP", "MZ", "NL", "OD", "PB", "PY", "RJ", "SK", "TN", "TR",
+            "TS", "UK", "UP", "WB"
+        }
+        dl_raw = re.sub(r'[\s\-\/]', '', str(data.get("document_number", "")).strip().upper())
         dl_pattern = r'^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$'
-        is_valid_format = bool(re.match(dl_pattern, dl_raw)) or len(dl_raw) >= 12
+        dl_alt_pattern = r'^[A-Z]{2}[0-9]{11,14}$'
 
         state_code = dl_raw[:2] if len(dl_raw) >= 2 else ""
+        is_state_valid = state_code in INDIAN_STATES
+        is_format_match = bool(re.match(dl_pattern, dl_raw) or re.match(dl_alt_pattern, dl_raw))
+        is_valid_format = is_format_match and is_state_valid
 
         checks = {
             "format_valid": {"valid": is_valid_format, "description": "State RTO Code + Year + Serial Structure"},
