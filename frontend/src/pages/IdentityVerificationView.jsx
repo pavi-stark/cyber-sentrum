@@ -53,6 +53,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
   const [isDigiLockerOpen, setIsDigiLockerOpen] = useState(false);
   const [isDigiLockerVerified, setIsDigiLockerVerified] = useState(false);
   const resultRef = useRef(null);
+  const errorRef = useRef(null);
 
   useEffect(() => {
     if (result && resultRef.current) {
@@ -506,6 +507,11 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
       // Check for document type or structure mismatch (HTTP 422)
       if (res?.mismatch_error) {
         setMismatchError(res.mismatch_error);
+        setTimeout(() => {
+          if (errorRef.current) {
+            errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 50);
         return;
       }
 
@@ -794,7 +800,7 @@ export default function IdentityVerificationView({ onScreeningComplete }) {
 
           {/* Document mismatch error / rejection alert */}
           {mismatchError && (
-            <div className="p-4 bg-red-50 border-2 border-red-400 rounded-2xl flex items-start space-x-3">
+            <div ref={errorRef} className="p-4 bg-red-50 border-2 border-red-400 rounded-2xl flex items-start space-x-3">
               <AlertOctagon className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-extrabold text-red-800 uppercase mb-1">

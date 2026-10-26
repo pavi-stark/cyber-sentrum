@@ -138,7 +138,11 @@ def process_screening_json(
         submitted_type = _normalize_doc_type(payload.document_type or "AADHAAR_CARD")
 
         # Strict Document Structure Validation (Exclusively accepts Aadhaar, Voter ID, Driving Licence)
-        detection = OCRMRZService.detect_document_type(doc_bytes)
+        detection = OCRMRZService.detect_document_type(
+            doc_bytes,
+            provided_fields=payload.extracted_fields,
+            submitted_type=submitted_type
+        )
         detected_type = detection.get("detected_type")
         detection_confidence = detection.get("confidence", "LOW")
 
